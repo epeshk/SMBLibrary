@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -22,44 +24,54 @@ namespace SMBLibrary.SMB2
         public SessionFlags SessionFlags;
         private ushort SecurityBufferOffset;
         private ushort SecurityBufferLength;
-        public byte[] SecurityBuffer = new byte[0];
+        public IMemoryOwner<byte> SecurityBuffer = MemoryOwner<byte>.Empty;
 
-        public SessionSetupResponse() : base(SMB2CommandName.SessionSetup)
+        public SessionSetupResponse Init()
         {
+            SessionFlags = default;
+            SecurityBufferOffset = default;
+            SecurityBufferLength = default;
+            
+            Init(SMB2CommandName.SessionSetup);
             Header.IsResponse = true;
             StructureSize = DeclaredSize;
+            return this;
         }
 
-        public SessionSetupResponse(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            SessionFlags = (SessionFlags)LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 2);
-            SecurityBufferOffset = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 4);
-            SecurityBufferLength = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 6);
-            SecurityBuffer = ByteReader.ReadBytes(buffer, offset + SecurityBufferOffset, SecurityBufferLength);
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            SessionFlags = (SessionFlags)LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 2);
+            SecurityBufferOffset = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 4);
+            SecurityBufferLength = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 6);
+            SecurityBuffer = ByteReader.ReadBytes_Rent(buffer, offset + SecurityBufferOffset, SecurityBufferLength);
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
             SecurityBufferOffset = 0;
-            SecurityBufferLength = (ushort)SecurityBuffer.Length;
-            if (SecurityBuffer.Length > 0)
+            SecurityBufferLength = (ushort)SecurityBuffer.Length();
+            if (SecurityBuffer.Length() > 0)
             {
-                SecurityBufferOffset = SMB2Header.Length + FixedSize;
+                SecurityBufferOffset = Smb2Header.Length + FixedSize;
             }
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 2, (ushort)SessionFlags);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 4, SecurityBufferOffset);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 6, SecurityBufferLength);
-            ByteWriter.WriteBytes(buffer, offset + 8, SecurityBuffer);
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            LittleEndianWriter.WriteUInt16(buffer, 2, (ushort)SessionFlags);
+            LittleEndianWriter.WriteUInt16(buffer, 4, SecurityBufferOffset);
+            LittleEndianWriter.WriteUInt16(buffer, 6, SecurityBufferLength);
+            BufferWriter.WriteBytes(buffer, 8, SecurityBuffer.Memory.Span);
         }
 
-        public override int CommandLength
+        public override void Dispose()
         {
-            get
-            {
-                return FixedSize + SecurityBuffer.Length;
-            }
+            base.Dispose();
+            SecurityBuffer?.Dispose();
+            SecurityBuffer = null;
+            ObjectsPool<SessionSetupResponse>.Return(this);
         }
+
+        public override int CommandLength => FixedSize + SecurityBuffer.Length();
     }
 }

@@ -4,6 +4,7 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 
 namespace SMBLibrary.SMB1
@@ -19,13 +20,13 @@ namespace SMBLibrary.SMB1
         public OpenResult OpenResult;
         public LockStatus LockStatus;
 
-        public ActionTaken(byte[] buffer, int offset)
+        public ActionTaken(Span<byte> buffer, int offset)
         {
             OpenResult = (OpenResult)(buffer[offset + 0] & 0x03);
             LockStatus = (LockStatus)(buffer[offset + 1] >> 7);
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
             buffer[offset + 0] = (byte)((byte)OpenResult & 0x03);
             buffer[offset + 1] = (byte)((byte)LockStatus << 7);

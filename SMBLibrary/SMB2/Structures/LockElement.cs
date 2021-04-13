@@ -4,6 +4,7 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
 using Utilities;
@@ -19,7 +20,7 @@ namespace SMBLibrary.SMB2
         public LockFlags Flags;
         public uint Reserved;
 
-        public LockElement(byte[] buffer, int offset)
+        public LockElement(Span<byte> buffer, int offset)
         {
             Offset = LittleEndianConverter.ToUInt64(buffer, offset + 0);
             Length = LittleEndianConverter.ToUInt64(buffer, offset + 8);
@@ -27,7 +28,7 @@ namespace SMBLibrary.SMB2
             Reserved = LittleEndianConverter.ToUInt32(buffer, offset + 20);
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
             LittleEndianWriter.WriteUInt64(buffer, offset + 0, Offset);
             LittleEndianWriter.WriteUInt64(buffer, offset + 8, Length);
@@ -37,10 +38,7 @@ namespace SMBLibrary.SMB2
 
         public bool SharedLock
         {
-            get
-            {
-                return (Flags & LockFlags.SharedLock) > 0;
-            }
+            get => (Flags & LockFlags.SharedLock) > 0;
             set
             {
                 if (value)
@@ -56,10 +54,7 @@ namespace SMBLibrary.SMB2
 
         public bool ExclusiveLock
         {
-            get
-            {
-                return (Flags & LockFlags.ExclusiveLock) > 0;
-            }
+            get => (Flags & LockFlags.ExclusiveLock) > 0;
             set
             {
                 if (value)
@@ -75,10 +70,7 @@ namespace SMBLibrary.SMB2
 
         public bool Unlock
         {
-            get
-            {
-                return (Flags & LockFlags.Unlock) > 0;
-            }
+            get => (Flags & LockFlags.Unlock) > 0;
             set
             {
                 if (value)
@@ -94,10 +86,7 @@ namespace SMBLibrary.SMB2
 
         public bool FailImmediately
         {
-            get
-            {
-                return (Flags & LockFlags.FailImmediately) > 0;
-            }
+            get => (Flags & LockFlags.FailImmediately) > 0;
             set
             {
                 if (value)
@@ -111,22 +100,22 @@ namespace SMBLibrary.SMB2
             }
         }
 
-        public static List<LockElement> ReadLockList(byte[] buffer, int offset, int lockCount)
+        public static List<LockElement> ReadLockList(Span<byte> buffer, int offset, int lockCount)
         {
-            List<LockElement> result = new List<LockElement>();
-            for(int lockIndex = 0; lockIndex < lockCount; lockIndex++)
+            var result = new List<LockElement>();
+            for(var lockIndex = 0; lockIndex < lockCount; lockIndex++)
             {
-                LockElement element = new LockElement(buffer, offset + lockIndex * StructureLength);
+                var element = new LockElement(buffer, offset + lockIndex * StructureLength);
                 result.Add(element);
             }
             return result;
         }
 
-        public static void WriteLockList(byte[] buffer, int offset, List<LockElement> locks)
+        public static void WriteLockList(Span<byte> buffer, int offset, List<LockElement> locks)
         {
-            for (int lockIndex = 0; lockIndex < locks.Count; lockIndex++)
+            for (var lockIndex = 0; lockIndex < locks.Count; lockIndex++)
             {
-                LockElement element = locks[lockIndex];
+                var element = locks[lockIndex];
                 element.WriteBytes(buffer, offset + lockIndex * StructureLength);
             }
         }

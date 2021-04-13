@@ -4,10 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
-using System.IO;
-using Utilities;
 
 namespace SMBLibrary.Server
 {
@@ -40,7 +39,7 @@ namespace SMBLibrary.Server
         {
             for (ushort offset = 0; offset < UInt16.MaxValue; offset++)
             {
-                ushort userID = (ushort)(m_nextUID + offset);
+                var userID = (ushort)(m_nextUID + offset);
                 if (userID == 0 || userID == 0xFFFE || userID == 0xFFFF)
                 {
                     continue;
@@ -56,7 +55,7 @@ namespace SMBLibrary.Server
 
         public SMB1Session CreateSession(ushort userID, string userName, string machineName, byte[] sessionKey, object accessToken)
         {
-            SMB1Session session = new SMB1Session(this, userID, userName, machineName, sessionKey, accessToken);
+            var session = new SMB1Session(this, userID, userName, machineName, sessionKey, accessToken);
             lock (m_sessions)
             {
                 m_sessions.Add(userID, session);
@@ -67,7 +66,7 @@ namespace SMBLibrary.Server
         /// <returns>null if all UserID values have already been allocated</returns>
         public SMB1Session CreateSession(string userName, string machineName, byte[] sessionKey, object accessToken)
         {
-            ushort? userID = AllocateUserID();
+            var userID = AllocateUserID();
             if (userID.HasValue)
             {
                 return CreateSession(userID.Value, userName, machineName, sessionKey, accessToken);
@@ -100,7 +99,7 @@ namespace SMBLibrary.Server
         {
             lock (m_sessions)
             {
-                foreach (SMB1Session session in m_sessions.Values)
+                foreach (var session in m_sessions.Values)
                 {
                     session.Close();
                 }
@@ -111,12 +110,12 @@ namespace SMBLibrary.Server
 
         public override List<SessionInformation> GetSessionsInformation()
         {
-            List<SessionInformation> result = new List<SessionInformation>();
+            var result = new List<SessionInformation>();
             lock (m_sessions)
             {
-                foreach (SMB1Session session in m_sessions.Values)
+                foreach (var session in m_sessions.Values)
                 {
-                    result.Add(new SessionInformation(this.ClientEndPoint, this.Dialect, session.UserName, session.MachineName, session.GetOpenFilesInformation(), session.CreationDT));
+                    result.Add(new SessionInformation(ClientEndPoint, Dialect, session.UserName, session.MachineName, session.GetOpenFilesInformation(), session.CreationDT));
                 }
             }
             return result;
@@ -130,7 +129,7 @@ namespace SMBLibrary.Server
         {
             for (ushort offset = 0; offset < UInt16.MaxValue; offset++)
             {
-                ushort treeID = (ushort)(m_nextTID + offset);
+                var treeID = (ushort)(m_nextTID + offset);
                 if (treeID == 0 || treeID == 0xFFFF)
                 {
                     continue;
@@ -146,7 +145,7 @@ namespace SMBLibrary.Server
 
         private bool IsTreeIDAllocated(ushort treeID)
         {
-            foreach (SMB1Session session in m_sessions.Values)
+            foreach (var session in m_sessions.Values)
             {
                 if (session.GetConnectedTree(treeID) != null)
                 {
@@ -165,7 +164,7 @@ namespace SMBLibrary.Server
         {
             for (ushort offset = 0; offset < UInt16.MaxValue; offset++)
             {
-                ushort fileID = (ushort)(m_nextFID + offset);
+                var fileID = (ushort)(m_nextFID + offset);
                 if (fileID == 0 || fileID == 0xFFFF)
                 {
                     continue;
@@ -181,7 +180,7 @@ namespace SMBLibrary.Server
 
         private bool IsFileIDAllocated(ushort fileID)
         {
-            foreach (SMB1Session session in m_sessions.Values)
+            foreach (var session in m_sessions.Values)
             {
                 if (session.GetOpenFileObject(fileID) != null)
                 {
@@ -193,7 +192,7 @@ namespace SMBLibrary.Server
 
         public ProcessStateObject CreateProcessState(uint processID)
         {
-            ProcessStateObject processState = new ProcessStateObject();
+            var processState = new ProcessStateObject();
             m_processStateList[processID] = processState;
             return processState;
         }
@@ -204,10 +203,8 @@ namespace SMBLibrary.Server
             {
                 return m_processStateList[processID];
             }
-            else
-            {
-                return null;
-            }
+
+            return null;
         }
 
         public void RemoveProcessState(uint processID)
@@ -217,7 +214,7 @@ namespace SMBLibrary.Server
 
         public SMB1AsyncContext CreateAsyncContext(ushort userID, ushort treeID, uint processID, ushort multiplexID, ushort fileID, SMB1ConnectionState connection)
         {
-            SMB1AsyncContext context = new SMB1AsyncContext();
+            var context = new SMB1AsyncContext();
             context.UID = userID;
             context.TID = treeID;
             context.MID = multiplexID;
@@ -235,7 +232,7 @@ namespace SMBLibrary.Server
         {
             lock (m_pendingRequests)
             {
-                int index = IndexOfAsyncContext(userID, treeID, processID, multiplexID);
+                var index = IndexOfAsyncContext(userID, treeID, processID, multiplexID);
                 if (index >= 0)
                 {
                     return m_pendingRequests[index];
@@ -248,7 +245,7 @@ namespace SMBLibrary.Server
         {
             lock (m_pendingRequests)
             {
-                int index = IndexOfAsyncContext(context.UID, context.TID, context.PID, context.MID);
+                var index = IndexOfAsyncContext(context.UID, context.TID, context.PID, context.MID);
                 if (index >= 0)
                 {
                     m_pendingRequests.RemoveAt(index);
@@ -258,9 +255,9 @@ namespace SMBLibrary.Server
 
         private int IndexOfAsyncContext(ushort userID, ushort treeID, uint processID, ushort multiplexID)
         {
-            for (int index = 0; index < m_pendingRequests.Count; index++)
+            for (var index = 0; index < m_pendingRequests.Count; index++)
             {
-                SMB1AsyncContext context = m_pendingRequests[index];
+                var context = m_pendingRequests[index];
                 if (context.UID == userID &&
                     context.TID == treeID &&
                     context.PID == processID &&

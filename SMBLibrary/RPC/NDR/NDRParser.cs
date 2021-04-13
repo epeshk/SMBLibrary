@@ -4,10 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
+
+using System.Buffers;
 using System.Collections.Generic;
-using System.IO;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.RPC
@@ -18,13 +17,13 @@ namespace SMBLibrary.RPC
     /// </summary>
     public class NDRParser
     {
-        private byte[] m_buffer;
+        private IMemoryOwner<byte> m_buffer;
         private int m_offset;
         private int m_depth;
         private List<INDRStructure> m_deferredStructures = new List<INDRStructure>();
         private Dictionary<uint, INDRStructure> m_referentToInstance = new Dictionary<uint, INDRStructure>();
 
-        public NDRParser(byte[] buffer)
+        public NDRParser(IMemoryOwner<byte> buffer)
         {
             m_buffer = buffer;
             m_offset = 0;
@@ -57,11 +56,12 @@ namespace SMBLibrary.RPC
             {
                 // Make a copy of all the deferred structures, additional deferred structures will be inserted to m_deferredStructures
                 // as we process the existing list
-                List<INDRStructure> deferredStructures = new List<INDRStructure>(m_deferredStructures);
+                var deferredStructures = new List<INDRStructure>(m_deferredStructures);
                 m_deferredStructures.Clear();
                 // Read all deferred types:
-                foreach (INDRStructure deferredStructure in deferredStructures)
+                for (var index = 0; index < deferredStructures.Count; index++)
                 {
+                    var deferredStructure = deferredStructures[index];
                     deferredStructure.Read(this);
                 }
             }
@@ -69,7 +69,7 @@ namespace SMBLibrary.RPC
 
         public string ReadUnicodeString()
         {
-            NDRUnicodeString unicodeString = new NDRUnicodeString(this);
+            var unicodeString = new NDRUnicodeString(this);
             return unicodeString.Value;
         }
 
@@ -81,7 +81,7 @@ namespace SMBLibrary.RPC
         // 14.3.11.1 - Top-level Full Pointers
         public string ReadTopLevelUnicodeStringPointer()
         {
-            uint referentID = ReadUInt32();
+            var referentID = ReadUInt32();
             if (referentID == 0)
             {
                 return null;
@@ -89,12 +89,12 @@ namespace SMBLibrary.RPC
 
             if (m_referentToInstance.ContainsKey(referentID))
             {
-                NDRUnicodeString unicodeString = (NDRUnicodeString)m_referentToInstance[referentID];
+                var unicodeString = (NDRUnicodeString)m_referentToInstance[referentID];
                 return unicodeString.Value;
             }
             else
             {
-                NDRUnicodeString unicodeString = new NDRUnicodeString(this);
+                var unicodeString = new NDRUnicodeString(this);
                 m_referentToInstance.Add(referentID, unicodeString);
                 return unicodeString.Value;
             }
@@ -107,7 +107,7 @@ namespace SMBLibrary.RPC
 
         public void ReadEmbeddedStructureFullPointer<T>(ref T structure) where T : INDRStructure, new ()
         {
-            uint referentID = ReadUInt32();
+            var referentID = ReadUInt32();
             if (referentID != 0) // not null
             {
                 if (structure == null)
@@ -118,7 +118,7 @@ namespace SMBLibrary.RPC
             }
             else
             {
-                structure = default(T);
+                structure = default;
             }
         }
 
@@ -126,7 +126,7 @@ namespace SMBLibrary.RPC
         public uint ReadUInt16()
         {
             m_offset += (2 - (m_offset % 2)) % 2;
-            return LittleEndianReader.ReadUInt16(m_buffer, ref m_offset);
+            return LittleEndianReader.ReadUInt16(m_buffer.Memory.Span, ref m_offset);
         }
 
         // 14.2.2 - Alignment of Primitive Types

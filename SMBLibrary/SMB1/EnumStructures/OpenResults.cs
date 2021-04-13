@@ -4,10 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
-using Utilities;
 
 namespace SMBLibrary.SMB1
 {
@@ -18,13 +16,13 @@ namespace SMBLibrary.SMB1
         public OpenResult OpenResult;
         public bool OpLockGranted;
 
-        public OpenResults(byte[] buffer, int offset)
+        public OpenResults(Span<byte> buffer, int offset)
         {
             OpenResult = (OpenResult)(buffer[offset + 0] & 0x3);
             OpLockGranted = (buffer[offset + 1] & 0x80) > 0;
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
             buffer[offset + 0] = (byte)OpenResult;
             if (OpLockGranted)
@@ -37,13 +35,13 @@ namespace SMBLibrary.SMB1
             }
         }
 
-        public void WriteBytes(byte[] buffer, ref int offset)
+        public void WriteBytes(Span<byte> buffer, ref int offset)
         {
             WriteBytes(buffer, offset);
             offset += Length;
         }
 
-        public static OpenResults Read(byte[] buffer, ref int offset)
+        public static OpenResults Read(Span<byte> buffer, ref int offset)
         {
             offset += Length;
             return new OpenResults(buffer, offset - Length);

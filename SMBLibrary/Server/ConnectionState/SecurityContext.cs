@@ -4,8 +4,7 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
+
 using System.Net;
 using SMBLibrary.Authentication.GSSAPI;
 
@@ -28,28 +27,10 @@ namespace SMBLibrary
             AccessToken = accessToken;
         }
 
-        public string UserName
-        {
-            get
-            {
-                return m_userName;
-            }
-        }
+        public string UserName => m_userName;
 
-        public string MachineName
-        {
-            get
-            {
-                return m_machineName;
-            }
-        }
+        public string MachineName => m_machineName;
 
-        public IPEndPoint ClientEndPoint
-        {
-            get
-            {
-                return m_clientEndPoint;
-            }
-        }
+        public IPEndPoint ClientEndPoint => m_clientEndPoint;
     }
 }

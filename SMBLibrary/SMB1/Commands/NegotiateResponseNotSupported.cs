@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -19,31 +20,28 @@ namespace SMBLibrary.SMB1
         public const int ParametersLength = 2;
         public const ushort DialectsNotSupported = 0xFFFF;
 
-        public NegotiateResponseNotSupported() : base()
+        public override SMB1Command Init()
         {
+            base.Init();
+
+            return this;
         }
 
-        public NegotiateResponseNotSupported(byte[] buffer, int offset) : base(buffer, offset, false)
+        public NegotiateResponseNotSupported Init(Span<byte> buffer, int offset)
         {
             throw new NotImplementedException();
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            this.SMBParameters = new byte[ParametersLength];
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 0, DialectsNotSupported);
+            SmbParameters = Arrays.Rent(ParametersLength);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 0, DialectsNotSupported);
 
-            this.SMBData = new byte[0];
+            SmbData = MemoryOwner<byte>.Empty;
 
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_NEGOTIATE;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_NEGOTIATE;
     }
 }

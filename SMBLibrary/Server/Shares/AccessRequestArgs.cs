@@ -4,29 +4,38 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.IO;
 using System.Net;
+using MemoryPools.Memory;
 
 namespace SMBLibrary.Server
 {
-    public class AccessRequestArgs : EventArgs
+    public class AccessRequestArgs : EventArgs, IDisposable
     {
-        public string UserName;
-        public string Path;
+        public IMemoryOwner<char> UserName;
+        public IMemoryOwner<char> Path;
         public FileAccess RequestedAccess;
-        public string MachineName;
+        public IMemoryOwner<char> MachineName;
         public IPEndPoint ClientEndPoint;
         public bool Allow = true;
 
-        public AccessRequestArgs(string userName, string path, FileAccess requestedAccess, string machineName, IPEndPoint clientEndPoint)
+        public AccessRequestArgs(ReadOnlySpan<char> userName, ReadOnlySpan<char> path, FileAccess requestedAccess, ReadOnlySpan<char> machineName, IPEndPoint clientEndPoint)
         {
-            UserName = userName;
-            Path = path;
+            UserName = Arrays.RentFrom(userName);
+            Path = Arrays.RentFrom(path);
             RequestedAccess = requestedAccess;
-            MachineName = machineName;
+            MachineName = Arrays.RentFrom(machineName);
             ClientEndPoint = clientEndPoint;
+        }
+
+        public void Dispose()
+        {
+            UserName?.Dispose();
+            Path?.Dispose();
+            MachineName?.Dispose();
         }
     }
 }

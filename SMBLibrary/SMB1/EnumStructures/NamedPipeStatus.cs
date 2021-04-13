@@ -4,6 +4,7 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 
 namespace SMBLibrary.SMB1
@@ -45,7 +46,7 @@ namespace SMBLibrary.SMB1
         public Endpoint Endpoint;
         public NonBlocking NonBlocking;
 
-        public NamedPipeStatus(byte[] buffer, int offset)
+        public NamedPipeStatus(Span<byte> buffer, int offset)
         {
             ICount = buffer[offset + 0];
             ReadMode = (ReadMode)(buffer[offset + 1] & 0x03);
@@ -63,7 +64,7 @@ namespace SMBLibrary.SMB1
             NonBlocking = (NonBlocking)((value & 0x80) >> 15);
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
             buffer[offset + 0] = ICount;
             buffer[offset + 1] = (byte)((byte)ReadMode & 0x03);
@@ -72,7 +73,7 @@ namespace SMBLibrary.SMB1
             buffer[offset + 1] |= (byte)(((byte)NonBlocking << 7) & 0x80);
         }
 
-        public void WriteBytes(byte[] buffer, ref int offset)
+        public void WriteBytes(Span<byte> buffer, ref int offset)
         {
             WriteBytes(buffer, offset);
             offset += Length;
@@ -88,7 +89,7 @@ namespace SMBLibrary.SMB1
             return result;
         }
 
-        public static NamedPipeStatus Read(byte[] buffer, ref int offset)
+        public static NamedPipeStatus Read(Span<byte> buffer, ref int offset)
         {
             offset += Length;
             return new NamedPipeStatus(buffer, offset - 2);

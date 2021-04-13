@@ -4,9 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using System.Text;
+
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -20,25 +20,21 @@ namespace SMBLibrary.SMB1
         // Parameters;
         public ushort BytesWritten;
 
-        public TransactionWriteNamedPipeResponse() : base()
+        public TransactionWriteNamedPipeResponse()
         {}
 
-        public TransactionWriteNamedPipeResponse(byte[] parameters) : base()
+        public TransactionWriteNamedPipeResponse(byte[] parameters)
         {
             BytesWritten = LittleEndianConverter.ToUInt16(parameters, 0);
         }
 
-        public override byte[] GetParameters()
+        public override IMemoryOwner<byte> GetParameters()
         {
-            return LittleEndianConverter.GetBytes(BytesWritten);
+            var buf = Arrays.Rent(2);
+            LittleEndianConverter.GetBytes(buf.Memory.Span, BytesWritten);
+            return buf;
         }
 
-        public override TransactionSubcommandName SubcommandName
-        {
-            get
-            {
-                return TransactionSubcommandName.TRANS_WRITE_NMPIPE;
-            }
-        }
+        public override TransactionSubcommandName SubcommandName => TransactionSubcommandName.TRANS_WRITE_NMPIPE;
     }
 }

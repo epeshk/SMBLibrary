@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -40,20 +41,20 @@ namespace SMBLibrary.SMB1
         {
         }
 
-        public NTTransactCreateRequest(byte[] parameters, byte[] data, bool isUnicode)
+        public NTTransactCreateRequest(IMemoryOwner<byte> parameters, IMemoryOwner<byte> data, bool isUnicode)
         {
-            int parametersOffset = 0;
+            var parametersOffset = 0;
             Flags = (NTCreateFlags)LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
             RootDirectoryFID = LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
             DesiredAccess = (AccessMask)LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
             AllocationSize = LittleEndianReader.ReadInt64(parameters, ref parametersOffset);
-            ExtFileAttributes = (ExtendedFileAttributes)LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
+            ExtFileAttributes = LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
             ShareAccess = (ShareAccess)LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
             CreateDisposition = (CreateDisposition)LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
             CreateOptions = (CreateOptions)LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
-            uint securityDescriptiorLength = LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
-            uint eaLength = LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
-            uint nameLength = LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
+            var securityDescriptiorLength = LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
+            var eaLength = LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
+            var nameLength = LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
             ImpersonationLevel = (ImpersonationLevel)LittleEndianReader.ReadUInt32(parameters, ref parametersOffset);
             SecurityFlags = (SecurityFlags)ByteReader.ReadByte(parameters, ref parametersOffset);
 
@@ -61,30 +62,24 @@ namespace SMBLibrary.SMB1
             {
                 parametersOffset++;
             }
-            Name = SMB1Helper.ReadFixedLengthString(parameters, ref parametersOffset, isUnicode, (int)nameLength);
+            Name = SMB1Helper.ReadFixedLengthString(parameters.Memory.Span, ref parametersOffset, isUnicode, (int)nameLength);
             if (securityDescriptiorLength > 0)
             {
-                SecurityDescriptor = new SecurityDescriptor(data, 0);
+                SecurityDescriptor = new SecurityDescriptor(data.Memory.Span, 0);
             }
-            ExtendedAttributes = FileFullEAInformation.ReadList(data, (int)securityDescriptiorLength);
+            ExtendedAttributes = FileFullEAInformation.ReadList(data.Memory.Span, (int)securityDescriptiorLength);
         }
 
-        public override byte[] GetParameters(bool isUnicode)
+        public override IMemoryOwner<byte> GetParameters(bool isUnicode)
         {
             throw new NotImplementedException();
         }
 
-        public override byte[] GetData()
+        public override IMemoryOwner<byte> GetData()
         {
             throw new NotImplementedException();
         }
 
-        public override NTTransactSubcommandName SubcommandName
-        {
-            get
-            {
-                return NTTransactSubcommandName.NT_TRANSACT_CREATE;
-            }
-        }
+        public override NTTransactSubcommandName SubcommandName => NTTransactSubcommandName.NT_TRANSACT_CREATE;
     }
 }

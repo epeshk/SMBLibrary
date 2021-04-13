@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.RPC
@@ -20,26 +22,26 @@ namespace SMBLibrary.RPC
         public RejectionReason RejectReason; // provider_reject_reason
         public VersionsSupported Versions; // versions
 
-        public BindNakPDU() : base()
+        public BindNakPDU()
         {
             PacketType = PacketTypeName.BindNak;
         }
 
-        public BindNakPDU(byte[] buffer, int offset) : base(buffer, offset)
+        public BindNakPDU(Span<byte> buffer, int offset) : base(buffer, offset)
         {
-            int startOffset = offset;
+            var startOffset = offset;
             offset += CommonFieldsLength;
             RejectReason = (RejectionReason)LittleEndianReader.ReadUInt16(buffer, ref offset);
             Versions = new VersionsSupported(buffer, offset);
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            byte[] buffer = new byte[Length];
-            WriteCommonFieldsBytes(buffer);
-            int offset = CommonFieldsLength;
-            LittleEndianWriter.WriteUInt16(buffer, ref offset, (ushort)RejectReason);
-            Versions.WriteBytes(buffer, offset);
+            var buffer = Arrays.Rent(Length);
+            WriteCommonFieldsBytes(buffer.Memory.Span);
+            var offset = CommonFieldsLength;
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, ref offset, (ushort)RejectReason);
+            Versions.WriteBytes(buffer.Memory.Span, offset);
             
             return buffer;
         }
@@ -48,7 +50,7 @@ namespace SMBLibrary.RPC
         {
             get
             {
-                int length = CommonFieldsLength + BindNakFieldsFixedLength;
+                var length = CommonFieldsLength + BindNakFieldsFixedLength;
                 if (Versions != null)
                 {
                     length += Versions.Length;

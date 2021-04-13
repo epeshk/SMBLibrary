@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -28,23 +30,23 @@ namespace SMBLibrary.SMB1
         {
         }
 
-        public SetFileBasicInfo(byte[] buffer) : this(buffer, 0)
+        public SetFileBasicInfo(Span<byte> buffer) : this(buffer, 0)
         {
         }
 
-        public SetFileBasicInfo(byte[] buffer, int offset)
+        public SetFileBasicInfo(Span<byte> buffer, int offset)
         {
             CreationTime = FileTimeHelper.ReadSetFileTime(buffer, offset + 0);
             LastAccessTime = FileTimeHelper.ReadSetFileTime(buffer, offset + 8);
             LastWriteTime = FileTimeHelper.ReadSetFileTime(buffer, offset + 16);
             LastChangeTime = FileTimeHelper.ReadSetFileTime(buffer, offset + 24);
-            ExtFileAttributes = (ExtendedFileAttributes)LittleEndianConverter.ToUInt32(buffer, offset + 32);
+            ExtFileAttributes = LittleEndianConverter.ToUInt32(buffer, offset + 32);
             Reserved = LittleEndianConverter.ToUInt32(buffer, offset + 36);
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            byte[] buffer = new byte[Length];
+            var buffer = Arrays.Rent(Length);
             FileTimeHelper.WriteSetFileTime(buffer, 0, CreationTime);
             FileTimeHelper.WriteSetFileTime(buffer, 8, LastAccessTime);
             FileTimeHelper.WriteSetFileTime(buffer, 16, LastWriteTime);
@@ -54,12 +56,6 @@ namespace SMBLibrary.SMB1
             return buffer;
         }
 
-        public override SetInformationLevel InformationLevel
-        {
-            get
-            {
-                return SetInformationLevel.SMB_SET_FILE_BASIC_INFO;
-            }
-        }
+        public override SetInformationLevel InformationLevel => SetInformationLevel.SMB_SET_FILE_BASIC_INFO;
     }
 }

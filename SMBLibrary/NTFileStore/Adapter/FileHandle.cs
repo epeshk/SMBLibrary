@@ -4,26 +4,32 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.IO;
-using System.Text;
 
 namespace SMBLibrary
 {
-    public class FileHandle
+    public class FileHandle : IDisposable
     {
-        public string Path;
+        public IMemoryOwner<char> Path;
         public bool IsDirectory;
         public Stream Stream;
         public bool DeleteOnClose;
 
-        public FileHandle(string path, bool isDirectory, Stream stream, bool deleteOnClose)
+        public FileHandle(IMemoryOwner<char> path, bool isDirectory, Stream stream, bool deleteOnClose)
         {
             Path = path;
             IsDirectory = isDirectory;
             Stream = stream;
             DeleteOnClose = deleteOnClose;
+        }
+
+        public void Dispose()
+        {
+            // tocheck Path?.Dispose();
+            // tocheck Path = null;
         }
     }
 }

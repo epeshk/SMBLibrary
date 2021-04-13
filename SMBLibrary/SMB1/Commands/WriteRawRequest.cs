@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -31,41 +32,49 @@ namespace SMBLibrary.SMB1
         // Data:
         public byte[] Data;
 
-        public WriteRawRequest() : base()
+        public override SMB1Command Init()
         {
-            Data = new byte[0];
+            base.Init();
+            FID = default;
+            CountOfBytes = default;
+            Reserved1 = default;
+            Offset = default;
+            Timeout = default;
+            WriteMode = default;
+            Reserved2 = default;
+            OffsetHigh = default; 
+            Data = Array.Empty<byte>();
+
+            return this;
         }
 
-        public WriteRawRequest(byte[] buffer, int offset) : base(buffer, offset, false)
+        public virtual SMB1Command Init(Span<byte> buffer, int offset)
         {
-            FID = LittleEndianConverter.ToUInt16(this.SMBParameters, 0);
-            CountOfBytes = LittleEndianConverter.ToUInt16(this.SMBParameters, 2);
-            Reserved1 = LittleEndianConverter.ToUInt16(this.SMBParameters, 4);
-            Offset = LittleEndianConverter.ToUInt32(this.SMBParameters, 6);
-            Timeout = LittleEndianConverter.ToUInt32(this.SMBParameters, 10);
-            WriteMode = (WriteMode)LittleEndianConverter.ToUInt16(this.SMBParameters, 14);
-            Reserved2 = LittleEndianConverter.ToUInt32(this.SMBParameters, 16);
-            ushort dataLength = LittleEndianConverter.ToUInt16(this.SMBParameters, 20);
-            ushort dataOffset = LittleEndianConverter.ToUInt16(this.SMBParameters, 22);
-            if (SMBParameters.Length == ParametersFixedLength + 4)
+            base.Init(buffer, offset, false);
+            FID = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 0);
+            CountOfBytes = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 2);
+            Reserved1 = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 4);
+            Offset = LittleEndianConverter.ToUInt32(SmbParameters.Memory.Span, 6);
+            Timeout = LittleEndianConverter.ToUInt32(SmbParameters.Memory.Span, 10);
+            WriteMode = (WriteMode)LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 14);
+            Reserved2 = LittleEndianConverter.ToUInt32(SmbParameters.Memory.Span, 16);
+            var dataLength = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 20);
+            var dataOffset = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 22);
+            if (SmbParameters.Length() == ParametersFixedLength + 4)
             {
-                OffsetHigh = LittleEndianConverter.ToUInt32(this.SMBParameters, 24);
+                OffsetHigh = LittleEndianConverter.ToUInt32(SmbParameters.Memory.Span, 24);
             }
 
-            Data = ByteReader.ReadBytes(buffer, dataOffset, dataLength);
+            Data = ByteReader.ReadBytes_RentArray(buffer, dataOffset, dataLength);
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
             throw new NotImplementedException();
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_WRITE_RAW;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_WRITE_RAW;
     }
 }

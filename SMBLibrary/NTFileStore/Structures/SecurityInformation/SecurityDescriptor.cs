@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary
@@ -34,15 +36,15 @@ namespace SMBLibrary
             Revision = 0x01;
         }
 
-        public SecurityDescriptor(byte[] buffer, int offset)
+        public SecurityDescriptor(Span<byte> buffer, int offset)
         {
             Revision = ByteReader.ReadByte(buffer, ref offset);
             Sbz1 = ByteReader.ReadByte(buffer, ref offset);
             Control = (SecurityDescriptorControl)LittleEndianReader.ReadUInt16(buffer, ref offset);
-            uint offsetOwner = LittleEndianReader.ReadUInt32(buffer, ref offset);
-            uint offsetGroup = LittleEndianReader.ReadUInt32(buffer, ref offset);
-            uint offsetSacl = LittleEndianReader.ReadUInt32(buffer, ref offset);
-            uint offsetDacl = LittleEndianReader.ReadUInt32(buffer, ref offset);
+            var offsetOwner = LittleEndianReader.ReadUInt32(buffer, ref offset);
+            var offsetGroup = LittleEndianReader.ReadUInt32(buffer, ref offset);
+            var offsetSacl = LittleEndianReader.ReadUInt32(buffer, ref offset);
+            var offsetDacl = LittleEndianReader.ReadUInt32(buffer, ref offset);
             if (offsetOwner != 0)
             {
                 OwnerSid = new SID(buffer, (int)offsetOwner);
@@ -64,14 +66,14 @@ namespace SMBLibrary
             }
         }
 
-        public byte[] GetBytes()
+        public IMemoryOwner<byte> GetBytes()
         {
-            byte[] buffer = new byte[Length];
+            var buffer = Arrays.Rent(Length);
             uint offsetOwner = 0;
             uint offsetGroup = 0;
             uint offsetSacl = 0;
             uint offsetDacl = 0;
-            int offset = FixedLength;
+            var offset = FixedLength;
             if (OwnerSid != null)
             {
                 offsetOwner = (uint)offset;
@@ -97,31 +99,31 @@ namespace SMBLibrary
             }
 
             offset = 0;
-            ByteWriter.WriteByte(buffer, ref offset, Revision);
-            ByteWriter.WriteByte(buffer, ref offset, Sbz1);
-            LittleEndianWriter.WriteUInt16(buffer, ref offset, (ushort)Control);
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, offsetOwner);
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, offsetGroup);
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, offsetSacl);
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, offsetDacl);
+            BufferWriter.WriteByte(buffer.Memory.Span, ref offset, Revision);
+            BufferWriter.WriteByte(buffer.Memory.Span, ref offset, Sbz1);
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, ref offset, (ushort)Control);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, offsetOwner);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, offsetGroup);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, offsetSacl);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, offsetDacl);
             if (OwnerSid != null)
             {
-                OwnerSid.WriteBytes(buffer, ref offset);
+                OwnerSid.WriteBytes(buffer.Memory.Span, ref offset);
             }
 
             if (GroupSid != null)
             {
-                GroupSid.WriteBytes(buffer, ref offset);
+                GroupSid.WriteBytes(buffer.Memory.Span, ref offset);
             }
 
             if (Sacl != null)
             {
-                Sacl.WriteBytes(buffer, ref offset);
+                Sacl.WriteBytes(buffer.Memory.Span, ref offset);
             }
 
             if (Dacl != null)
             {
-                Dacl.WriteBytes(buffer, ref offset);
+                Dacl.WriteBytes(buffer.Memory.Span, ref offset);
             }
 
             return buffer;
@@ -131,7 +133,7 @@ namespace SMBLibrary
         {
             get
             {
-                int length = FixedLength;
+                var length = FixedLength;
                 if (OwnerSid != null)
                 {
                     length += OwnerSid.Length;

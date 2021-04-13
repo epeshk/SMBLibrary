@@ -4,36 +4,47 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
 {
-    public abstract class SMB1Command
+    public abstract class SMB1Command : IDisposable
     {
-        protected byte[] SMBParameters; // SMB_Parameters
-        protected byte[] SMBData; // SMB_Data
+        protected IMemoryOwner<byte> SmbParameters;   // SMB_Parameters
+        protected IMemoryOwner<byte> SmbData;         // SMB_Data
 
-        public SMB1Command()
+        public virtual SMB1Command Init()
         {
-            SMBParameters = new byte[0];
-            SMBData = new byte[0];
+            SmbParameters = MemoryOwner<byte>.Empty;
+            SmbData = MemoryOwner<byte>.Empty;
+
+            return this;
         }
 
-        public SMB1Command(byte[] buffer, int offset, bool isUnicode)
+        public virtual SMB1Command Init(Span<byte> buffer, int offset, bool isUnicode)
         {
-            byte wordCount = ByteReader.ReadByte(buffer, ref offset);
+            var wordCount = ByteReader.ReadByte(buffer, ref offset);
             if (CommandName == CommandName.SMB_COM_NT_CREATE_ANDX && wordCount == NTCreateAndXResponseExtended.DeclaredParametersLength / 2)
             {
                 // [MS-SMB] Section 2.2.4.9.2 and Note <49>:
                 // Windows-based SMB servers send 50 (0x32) words in the extended response although they set the WordCount field to 0x2A.
                 wordCount = NTCreateAndXResponseExtended.ParametersLength / 2;
             }
-            SMBParameters = ByteReader.ReadBytes(buffer, ref offset, wordCount * 2);
-            ushort byteCount = LittleEndianReader.ReadUInt16(buffer, ref offset);
-            SMBData = ByteReader.ReadBytes(buffer, ref offset, byteCount);
+
+            SmbParameters = Arrays.Rent(wordCount * 2);
+            ByteReader.ReadBytes(SmbParameters.Memory.Span, buffer, offset, wordCount * 2); offset += wordCount * 2;
+            var byteCount = LittleEndianReader.ReadUInt16(buffer, ref offset);
+            
+            SmbData = Arrays.Rent(byteCount);
+            ByteReader.ReadBytes(SmbData.Memory.Span, buffer, offset, byteCount); offset += byteCount;
+
+            return this;
         }
 
         public abstract CommandName CommandName
@@ -41,15 +52,15 @@ namespace SMBLibrary.SMB1
             get;
         }
 
-        public virtual byte[] GetBytes(bool isUnicode)
+        public virtual IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            if (SMBParameters.Length % 2 > 0)
+            if (SmbParameters.Length() % 2 > 0)
             {
                 throw new Exception("SMB_Parameters Length must be a multiple of 2");
             }
-            int length = 1 + SMBParameters.Length + 2 + SMBData.Length;
-            byte[] buffer = new byte[length];
-            byte wordCount = (byte)(SMBParameters.Length / 2);
+            var length = 1 + SmbParameters.Length() + 2 + SmbData.Length();
+            var buffer = Arrays.Rent<byte>(length);
+            var wordCount = (byte)(SmbParameters.Length() / 2);
             if (this is NTCreateAndXResponseExtended)
             {
                 // [MS-SMB] Section 2.2.4.9.2 and Note <49>:
@@ -57,423 +68,374 @@ namespace SMBLibrary.SMB1
                 // WordCount SHOULD be set to 0x2A.
                 wordCount = NTCreateAndXResponseExtended.DeclaredParametersLength / 2;
             }
-            ushort byteCount = (ushort)SMBData.Length;
+            var byteCount = (ushort)SmbData.Length();
 
-            int offset = 0;
-            ByteWriter.WriteByte(buffer, ref offset, wordCount);
-            ByteWriter.WriteBytes(buffer, ref offset, SMBParameters);
-            LittleEndianWriter.WriteUInt16(buffer, ref offset, byteCount);
-            ByteWriter.WriteBytes(buffer, ref offset, SMBData);
+            var offset = 0;
+            BufferWriter.WriteByte(buffer.Memory.Span, ref offset, wordCount);
+            BufferWriter.WriteBytes(buffer.Memory.Span, ref offset, SmbParameters.Memory.Span);
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, ref offset, byteCount);
+            BufferWriter.WriteBytes(buffer.Memory.Span, ref offset, SmbData.Memory.Span);
 
             return buffer;
         }
 
-        public static SMB1Command ReadCommand(byte[] buffer, int offset, CommandName commandName, SMB1Header header)
+        public static SMB1Command ReadCommand(Span<byte> buffer, int offset, CommandName commandName, SMB1Header header)
         {
             if ((header.Flags & HeaderFlags.Reply) > 0)
             {
                 return ReadCommandResponse(buffer, offset, commandName, header.UnicodeFlag);
             }
-            else
-            {
-                return ReadCommandRequest(buffer, offset, commandName, header.UnicodeFlag);
-            }
+
+            return ReadCommandRequest(buffer, offset, commandName, header.UnicodeFlag);
         }
 
-        public static SMB1Command ReadCommandRequest(byte[] buffer, int offset, CommandName commandName, bool isUnicode)
+        public static SMB1Command ReadCommandRequest(Span<byte> buffer, int offset, CommandName commandName, bool isUnicode)
         {
             switch (commandName)
             {
-                case CommandName.SMB_COM_CREATE_DIRECTORY:
-                    return new CreateDirectoryRequest(buffer, offset, isUnicode);
-                case CommandName.SMB_COM_DELETE_DIRECTORY:
-                    return new DeleteDirectoryRequest(buffer, offset, isUnicode);
-                case CommandName.SMB_COM_CLOSE:
-                    return new CloseRequest(buffer, offset);
-                case CommandName.SMB_COM_FLUSH:
-                    return new FlushRequest(buffer, offset);
-                case CommandName.SMB_COM_DELETE:
-                    return new DeleteRequest(buffer, offset, isUnicode);
-                case CommandName.SMB_COM_RENAME:
-                    return new RenameRequest(buffer, offset, isUnicode);
-                case CommandName.SMB_COM_QUERY_INFORMATION:
-                    return new QueryInformationRequest(buffer, offset, isUnicode);
-                case CommandName.SMB_COM_SET_INFORMATION:
-                    return new SetInformationRequest(buffer, offset, isUnicode);
-                case CommandName.SMB_COM_READ:
-                    return new ReadRequest(buffer, offset);
-                case CommandName.SMB_COM_WRITE:
-                    return new WriteRequest(buffer, offset);
-                case CommandName.SMB_COM_CHECK_DIRECTORY:
-                    return new CheckDirectoryRequest(buffer, offset, isUnicode);
-                case CommandName.SMB_COM_WRITE_RAW:
-                    return new WriteRawRequest(buffer, offset);
-                case CommandName.SMB_COM_SET_INFORMATION2:
-                    return new SetInformation2Request(buffer, offset);
-                case CommandName.SMB_COM_LOCKING_ANDX:
-                    return new LockingAndXRequest(buffer, offset);
-                case CommandName.SMB_COM_TRANSACTION:
-                    return new TransactionRequest(buffer, offset, isUnicode);
-                case CommandName.SMB_COM_TRANSACTION_SECONDARY:
-                    return new TransactionSecondaryRequest(buffer, offset);
-                case CommandName.SMB_COM_ECHO:
-                    return new EchoRequest(buffer, offset);
-                case CommandName.SMB_COM_OPEN_ANDX:
-                    return new OpenAndXRequest(buffer, offset, isUnicode);
-                case CommandName.SMB_COM_READ_ANDX:
-                    return new ReadAndXRequest(buffer, offset);
-                case CommandName.SMB_COM_WRITE_ANDX:
-                    return new WriteAndXRequest(buffer, offset, isUnicode);
-                case CommandName.SMB_COM_TRANSACTION2:
-                    return new Transaction2Request(buffer, offset, isUnicode);
-                case CommandName.SMB_COM_TRANSACTION2_SECONDARY:
-                    return new Transaction2SecondaryRequest(buffer, offset);
-                case CommandName.SMB_COM_FIND_CLOSE2:
-                    return new FindClose2Request(buffer, offset);
-                case CommandName.SMB_COM_TREE_DISCONNECT:
-                    return new TreeDisconnectRequest(buffer, offset);
-                case CommandName.SMB_COM_NEGOTIATE:
-                    return new NegotiateRequest(buffer, offset);
+                case CommandName.SMB_COM_CREATE_DIRECTORY:      return ObjectsPool<CreateDirectoryRequest>.Get().Init(buffer, offset, isUnicode);
+                case CommandName.SMB_COM_DELETE_DIRECTORY:      return ObjectsPool<DeleteDirectoryRequest>.Get().Init(buffer, offset, isUnicode);
+                case CommandName.SMB_COM_CLOSE:                 return ObjectsPool<CloseRequest>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_FLUSH:                 return ObjectsPool<FlushRequest>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_DELETE:                return ObjectsPool<DeleteRequest>.Get().Init(buffer, offset, isUnicode);
+                case CommandName.SMB_COM_RENAME:                return ObjectsPool<RenameRequest>.Get().Init(buffer, offset, isUnicode);
+                case CommandName.SMB_COM_QUERY_INFORMATION:     return ObjectsPool<QueryInformationRequest>.Get().Init(buffer, offset, isUnicode);
+                case CommandName.SMB_COM_SET_INFORMATION:       return ObjectsPool<SetInformationRequest>.Get().Init(buffer, offset, isUnicode);
+                case CommandName.SMB_COM_READ:                  return ObjectsPool<ReadRequest>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_WRITE:                 return ObjectsPool<WriteRequest>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_CHECK_DIRECTORY:       return ObjectsPool<CheckDirectoryRequest>.Get().Init(buffer, offset, isUnicode);
+                case CommandName.SMB_COM_WRITE_RAW:             return ObjectsPool<WriteRawRequest>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_SET_INFORMATION2:      return ObjectsPool<SetInformation2Request>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_LOCKING_ANDX:          return ObjectsPool<LockingAndXRequest>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_TRANSACTION:           return ObjectsPool<TransactionRequest>.Get().Init(buffer, offset, isUnicode);
+                case CommandName.SMB_COM_TRANSACTION_SECONDARY: return ObjectsPool<TransactionSecondaryRequest>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_ECHO:                  return ObjectsPool<EchoRequest>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_OPEN_ANDX:             return ObjectsPool<OpenAndXRequest>.Get().Init(buffer, offset, isUnicode);
+                case CommandName.SMB_COM_READ_ANDX:             return ObjectsPool<ReadAndXRequest>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_WRITE_ANDX:            return ObjectsPool<WriteAndXRequest>.Get().Init(buffer, offset, isUnicode);
+                case CommandName.SMB_COM_TRANSACTION2:          return ObjectsPool<Transaction2Request>.Get().Init(buffer, offset, isUnicode);
+                case CommandName.SMB_COM_TRANSACTION2_SECONDARY: return ObjectsPool<Transaction2SecondaryRequest>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_FIND_CLOSE2:           return ObjectsPool<FindClose2Request>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_TREE_DISCONNECT:       return ObjectsPool<TreeDisconnectRequest>.Get().Init(buffer, offset);
+                case CommandName.SMB_COM_NEGOTIATE:             return ObjectsPool<NegotiateRequest>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_SESSION_SETUP_ANDX:
                     {
-                        byte wordCount = ByteReader.ReadByte(buffer, offset);
+                        var wordCount = ByteReader.ReadByte(buffer, offset);
                         if (wordCount * 2 == SessionSetupAndXRequest.ParametersLength)
                         {
-                            return new SessionSetupAndXRequest(buffer, offset, isUnicode);
+                            return ObjectsPool<SessionSetupAndXRequest>.Get().Init(buffer, offset, isUnicode);
                         }
-                        else if (wordCount * 2 == SessionSetupAndXRequestExtended.ParametersLength)
+
+                        if (wordCount * 2 == SessionSetupAndXRequestExtended.ParametersLength)
                         {
-                            return new SessionSetupAndXRequestExtended(buffer, offset, isUnicode);
+                            return ObjectsPool<SessionSetupAndXRequestExtended>.Get().Init(buffer, offset, isUnicode);
                         }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+
+                        throw new InvalidDataException();
                     }
                 case CommandName.SMB_COM_LOGOFF_ANDX:
-                    return new LogoffAndXRequest(buffer, offset);
+                    return ObjectsPool<LogoffAndXRequest>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_TREE_CONNECT_ANDX:
-                    return new TreeConnectAndXRequest(buffer, offset, isUnicode);
+                    return ObjectsPool<TreeConnectAndXRequest>.Get().Init(buffer, offset, isUnicode);
                 case CommandName.SMB_COM_NT_TRANSACT:
-                    return new NTTransactRequest(buffer, offset);
+                    return ObjectsPool<NTTransactRequest>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_NT_TRANSACT_SECONDARY:
-                    return new NTTransactSecondaryRequest(buffer, offset);
+                    return ObjectsPool<NTTransactSecondaryRequest>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_NT_CREATE_ANDX:
-                    return new NTCreateAndXRequest(buffer, offset, isUnicode);
+                    return ObjectsPool<NTCreateAndXRequest>.Get().Init(buffer, offset, isUnicode);
                 case CommandName.SMB_COM_NT_CANCEL:
-                    return new NTCancelRequest(buffer, offset);
+                    return ObjectsPool<NTCancelRequest>.Get().Init(buffer, offset);
                 default:
                     throw new InvalidDataException("Invalid SMB command 0x" + ((byte)commandName).ToString("X2"));
             }
         }
 
-        public static SMB1Command ReadCommandResponse(byte[] buffer, int offset, CommandName commandName, bool isUnicode)
+        public static SMB1Command ReadCommandResponse(Span<byte> buffer, int offset, CommandName commandName, bool isUnicode)
         {
-            byte wordCount = ByteReader.ReadByte(buffer, offset);
+            var wordCount = ByteReader.ReadByte(buffer, offset);
             switch (commandName)
             {
                 case CommandName.SMB_COM_CREATE_DIRECTORY:
-                    return new CreateDirectoryResponse(buffer, offset);
+                    return ObjectsPool<CreateDirectoryResponse>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_DELETE_DIRECTORY:
-                    return new DeleteDirectoryResponse(buffer, offset);
+                    return ObjectsPool<DeleteDirectoryResponse>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_CLOSE:
-                    return new CloseResponse(buffer, offset);
+                    return ObjectsPool<CloseResponse>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_FLUSH:
-                    return new FlushResponse(buffer, offset);
+                    return ObjectsPool<FlushResponse>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_DELETE:
-                    return new DeleteResponse(buffer, offset);
+                    return ObjectsPool<DeleteResponse>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_RENAME:
-                    return new RenameResponse(buffer, offset);
+                    return ObjectsPool<RenameResponse>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_QUERY_INFORMATION:
+                {
+                    if (wordCount * 2 == QueryInformationResponse.ParameterLength)
+                        {
+                            return ObjectsPool<QueryInformationResponse>.Get().Init(buffer, offset);
+                        }
+
+                    if (wordCount == 0)
                     {
-                        if (wordCount * 2 == QueryInformationResponse.ParameterLength)
-                        {
-                            return new QueryInformationResponse(buffer, offset);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
                     }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_SET_INFORMATION:
-                    return new SetInformationResponse(buffer, offset);
+                    return ObjectsPool<SetInformationResponse>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_READ:
+                {
+                    if (wordCount * 2 == ReadResponse.ParametersLength)
+                        {
+                            return ObjectsPool<ReadResponse>.Get().Init(buffer, offset);
+                        }
+
+                    if (wordCount == 0)
                     {
-                        if (wordCount * 2 == ReadResponse.ParametersLength)
-                        {
-                            return new ReadResponse(buffer, offset);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
                     }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_WRITE:
+                {
+                    if (wordCount * 2 == WriteResponse.ParametersLength)
+                        {
+                            return ObjectsPool<WriteResponse>.Get().Init(buffer, offset);
+                        }
+
+                    if (wordCount == 0)
                     {
-                        if (wordCount * 2 == WriteResponse.ParametersLength)
-                        {
-                            return new WriteResponse(buffer, offset);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
                     }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_CHECK_DIRECTORY:
-                    return new CheckDirectoryResponse(buffer, offset);
+                    return ObjectsPool<CheckDirectoryResponse>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_WRITE_RAW:
+                {
+                    if (wordCount * 2 == WriteRawInterimResponse.ParametersLength)
+                        {
+                            return ObjectsPool<WriteRawInterimResponse>.Get().Init(buffer, offset);
+                        }
+
+                    if (wordCount == 0)
                     {
-                        if (wordCount * 2 == WriteRawInterimResponse.ParametersLength)
-                        {
-                            return new WriteRawInterimResponse(buffer, offset);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
                     }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_WRITE_COMPLETE:
+                {
+                    if (wordCount * 2 == WriteRawFinalResponse.ParametersLength)
+                        {
+                            return ObjectsPool<WriteRawFinalResponse>.Get().Init(buffer, offset);
+                        }
+
+                    if (wordCount == 0)
                     {
-                        if (wordCount * 2 == WriteRawFinalResponse.ParametersLength)
-                        {
-                            return new WriteRawFinalResponse(buffer, offset);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
                     }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_SET_INFORMATION2:
-                    return new SetInformation2Response(buffer, offset);
+                    return ObjectsPool<SetInformation2Response>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_LOCKING_ANDX:
+                {
+                    if (wordCount * 2 == LockingAndXResponse.ParametersLength)
+                        {
+                            return ObjectsPool<LockingAndXResponse>.Get().Init(buffer, offset);
+                        }
+
+                    if (wordCount == 0)
                     {
-                        if (wordCount * 2 == LockingAndXResponse.ParametersLength)
-                        {
-                            return new LockingAndXResponse(buffer, offset);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
                     }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_TRANSACTION:
-                    {
-                        if (wordCount * 2 == TransactionInterimResponse.ParametersLength)
+                {
+                    if (wordCount * 2 == TransactionInterimResponse.ParametersLength)
                         {
-                            return new TransactionInterimResponse(buffer, offset);
+                            return ObjectsPool<TransactionInterimResponse>.Get().Init(buffer, offset);
                         }
-                        else
-                        {
-                            return new TransactionResponse(buffer, offset);
-                        }
-                    }
+
+                    return ObjectsPool<TransactionResponse>.Get().Init(buffer, offset);
+                }
                 case CommandName.SMB_COM_ECHO:
+                {
+                    if (wordCount * 2 == EchoResponse.ParametersLength)
+                        {
+                            return ObjectsPool<EchoResponse>.Get().Init(buffer, offset);
+                        }
+
+                    if (wordCount == 0)
                     {
-                        if (wordCount * 2 == EchoResponse.ParametersLength)
-                        {
-                            return new EchoResponse(buffer, offset);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
                     }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_OPEN_ANDX:
+                {
+                    if (wordCount * 2 == OpenAndXResponse.ParametersLength)
+                        {
+                            return ObjectsPool<OpenAndXResponse>.Get().Init(buffer, offset);
+                        }
+
+                    if (wordCount * 2 == OpenAndXResponseExtended.ParametersLength)
                     {
-                        if (wordCount * 2 == OpenAndXResponse.ParametersLength)
-                        {
-                            return new OpenAndXResponse(buffer, offset);
-                        }
-                        else if (wordCount * 2 == OpenAndXResponseExtended.ParametersLength)
-                        {
-                            return new OpenAndXResponseExtended(buffer, offset);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<OpenAndXResponseExtended>.Get().Init(buffer, offset);
                     }
+
+                    if (wordCount == 0)
+                    {
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
+                    }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_READ_ANDX:
+                {
+                    if (wordCount * 2 == ReadAndXResponse.ParametersLength)
+                        {
+                            return ObjectsPool<ReadAndXResponse>.Get().Init(buffer, offset, isUnicode);
+                        }
+
+                    if (wordCount == 0)
                     {
-                        if (wordCount * 2 == ReadAndXResponse.ParametersLength)
-                        {
-                            return new ReadAndXResponse(buffer, offset, isUnicode);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
                     }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_WRITE_ANDX:
+                {
+                    if (wordCount * 2 == WriteAndXResponse.ParametersLength)
+                        {
+                            return ObjectsPool<WriteAndXResponse>.Get().Init(buffer, offset);
+                        }
+
+                    if (wordCount == 0)
                     {
-                        if (wordCount * 2 == WriteAndXResponse.ParametersLength)
-                        {
-                            return new WriteAndXResponse(buffer, offset);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
                     }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_TRANSACTION2:
-                    {
-                        if (wordCount * 2 == Transaction2InterimResponse.ParametersLength)
+                {
+                    if (wordCount * 2 == TransactionInterimResponse.ParametersLength)
                         {
-                            return new Transaction2InterimResponse(buffer, offset);
+                            return ObjectsPool<Transaction2InterimResponse>.Get().Init(buffer, offset);
                         }
-                        else
-                        {
-                            return new Transaction2Response(buffer, offset);
-                        }
-                    }
+
+                    return ObjectsPool<Transaction2Response>.Get().Init(buffer, offset);
+                }
                 case CommandName.SMB_COM_FIND_CLOSE2:
-                    return new FindClose2Response(buffer, offset);
+                    return ObjectsPool<FindClose2Response>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_TREE_DISCONNECT:
-                    return new TreeDisconnectResponse(buffer, offset);
+                    return ObjectsPool<TreeDisconnectResponse>.Get().Init(buffer, offset);
                 case CommandName.SMB_COM_NEGOTIATE:
                     {
                         // Both NegotiateResponse and NegotiateResponseExtended have WordCount set to 17
                         if (wordCount * 2 == NegotiateResponse.ParametersLength)
                         {
-                            Capabilities capabilities = (Capabilities)LittleEndianConverter.ToUInt32(buffer, offset + 20);
+                            var capabilities = (Capabilities)LittleEndianConverter.ToUInt32(buffer, offset + 20);
                             if ((capabilities & Capabilities.ExtendedSecurity) > 0)
                             {
-                                return new NegotiateResponseExtended(buffer, offset);
+                                return ObjectsPool<NegotiateResponseExtended>.Get().Init(buffer, offset);
                             }
-                            else
-                            {
-                                return new NegotiateResponse(buffer, offset, isUnicode);
-                            }
+
+                            return ObjectsPool<NegotiateResponse>.Get().Init(buffer, offset, isUnicode);
                         }
                         if (wordCount == 0)
                         {
-                            return new ErrorResponse(commandName);
+                            return ObjectsPool<ErrorResponse>.Get().Init(commandName);
                         }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+
+                        throw new InvalidDataException();
                     }
                 case CommandName.SMB_COM_SESSION_SETUP_ANDX:
+                {
+                    if (wordCount * 2 == SessionSetupAndXResponse.ParametersLength)
+                        {
+                            return ObjectsPool<SessionSetupAndXResponse>.Get().Init(buffer, offset, isUnicode);
+                        }
+
+                    if (wordCount * 2 == SessionSetupAndXResponseExtended.ParametersLength)
                     {
-                        if (wordCount * 2 == SessionSetupAndXResponse.ParametersLength)
-                        {
-                            return new SessionSetupAndXResponse(buffer, offset, isUnicode);
-                        }
-                        else if (wordCount * 2 == SessionSetupAndXResponseExtended.ParametersLength)
-                        {
-                            return new SessionSetupAndXResponseExtended(buffer, offset, isUnicode);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<SessionSetupAndXResponseExtended>.Get().Init(buffer, offset, isUnicode);
                     }
+
+                    if (wordCount == 0)
+                    {
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
+                    }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_LOGOFF_ANDX:
+                {
+                    if (wordCount * 2 == LogoffAndXResponse.ParametersLength)
+                        {
+                            return ObjectsPool<LogoffAndXResponse>.Get().Init(buffer, offset);
+                        }
+
+                    if (wordCount == 0)
                     {
-                        if (wordCount * 2 == LogoffAndXResponse.ParametersLength)
-                        {
-                            return new LogoffAndXResponse(buffer, offset);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
                     }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_TREE_CONNECT_ANDX:
+                {
+                    if (wordCount * 2 == TreeConnectAndXResponse.ParametersLength)
+                        {
+                            return ObjectsPool<TreeConnectAndXResponse>.Get().Init(buffer, offset, isUnicode);
+                        }
+
+                    if (wordCount == 0)
                     {
-                        if (wordCount * 2 == TreeConnectAndXResponse.ParametersLength)
-                        {
-                            return new TreeConnectAndXResponse(buffer, offset, isUnicode);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
                     }
+
+                    throw new InvalidDataException();
+                }
                 case CommandName.SMB_COM_NT_TRANSACT:
-                    {
-                        if (wordCount * 2 == NTTransactInterimResponse.ParametersLength)
+                {
+                    if (wordCount * 2 == NTTransactInterimResponse.ParametersLength)
                         {
-                            return new NTTransactInterimResponse(buffer, offset);
+                            return ObjectsPool<NTTransactInterimResponse>.Get().Init(buffer, offset);
                         }
-                        else
-                        {
-                            return new NTTransactResponse(buffer, offset);
-                        }
-                    }
+
+                    return ObjectsPool<NTTransactResponse>.Get().Init(buffer, offset);
+                }
                 case CommandName.SMB_COM_NT_CREATE_ANDX:
+                {
+                    if (wordCount * 2 == NTCreateAndXResponse.ParametersLength)
+                        {
+                            return ObjectsPool<NTCreateAndXResponse>.Get().Init(buffer, offset);
+                        }
+
+                    if (wordCount * 2 == NTCreateAndXResponseExtended.ParametersLength ||
+                        wordCount * 2 == NTCreateAndXResponseExtended.DeclaredParametersLength)
                     {
-                        if (wordCount * 2 == NTCreateAndXResponse.ParametersLength)
-                        {
-                            return new NTCreateAndXResponse(buffer, offset);
-                        }
-                        else if (wordCount * 2 == NTCreateAndXResponseExtended.ParametersLength ||
-                                 wordCount * 2 == NTCreateAndXResponseExtended.DeclaredParametersLength)
-                        {
-                            return new NTCreateAndXResponseExtended(buffer, offset);
-                        }
-                        else if (wordCount == 0)
-                        {
-                            return new ErrorResponse(commandName);
-                        }
-                        else
-                        {
-                            throw new InvalidDataException();
-                        }
+                        return ObjectsPool<NTCreateAndXResponseExtended>.Get().Init(buffer, offset);
                     }
+
+                    if (wordCount == 0)
+                    {
+                        return ObjectsPool<ErrorResponse>.Get().Init(commandName);
+                    }
+
+                    throw new InvalidDataException();
+                }
                 default:
                     throw new InvalidDataException("Invalid SMB command 0x" + ((byte)commandName).ToString("X2"));
             }
@@ -481,9 +443,16 @@ namespace SMBLibrary.SMB1
 
         public static implicit operator List<SMB1Command>(SMB1Command command)
         {
-            List<SMB1Command> result = new List<SMB1Command>();
+            var result = new List<SMB1Command>();
             result.Add(command);
             return result;
+        }
+
+        public virtual void Dispose()
+        {
+            SmbParameters?.Dispose();
+            SmbData?.Dispose();
+            SmbParameters = SmbData = null;
         }
     }
 }

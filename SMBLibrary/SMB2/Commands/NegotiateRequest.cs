@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -26,51 +28,62 @@ namespace SMBLibrary.SMB2
         public DateTime ClientStartTime;
         public List<SMB2Dialect> Dialects = new List<SMB2Dialect>();
 
-        public NegotiateRequest() : base(SMB2CommandName.Negotiate)
+        public NegotiateRequest Init()
         {
+            SecurityMode = default;
+            Reserved = default;
+            Capabilities = default;
+            ClientGuid = default;
+            ClientStartTime = default;
+            Dialects.Clear();
+                
+            Init(SMB2CommandName.Negotiate);
             StructureSize = DeclaredSize;
+            return this;
         }
 
-        public NegotiateRequest(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            ushort dialectCount = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 2);
-            SecurityMode = (SecurityMode)LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 4);
-            Reserved = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 6);
-            Capabilities = (Capabilities)LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 8);
-            ClientGuid = LittleEndianConverter.ToGuid(buffer, offset + SMB2Header.Length + 12);
-            ClientStartTime = DateTime.FromFileTimeUtc(LittleEndianConverter.ToInt64(buffer, offset + SMB2Header.Length + 28));
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            var dialectCount = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 2);
+            SecurityMode = (SecurityMode)LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 4);
+            Reserved = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 6);
+            Capabilities = (Capabilities)LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 8);
+            ClientGuid = LittleEndianConverter.ToGuid(buffer, offset + Smb2Header.Length + 12);
+            ClientStartTime = DateTime.FromFileTimeUtc(LittleEndianConverter.ToInt64(buffer, offset + Smb2Header.Length + 28));
 
-            for (int index = 0; index < dialectCount; index++)
+            for (var index = 0; index < dialectCount; index++)
             {
-                SMB2Dialect dialect = (SMB2Dialect)LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 36 + index * 2);
+                var dialect = (SMB2Dialect)LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 36 + index * 2);
                 Dialects.Add(dialect);
             }
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 2, (ushort)Dialects.Count);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 4, (ushort)SecurityMode);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 6, Reserved);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 8, (uint)Capabilities);
-            LittleEndianWriter.WriteGuidBytes(buffer, offset + 12, ClientGuid);
-            LittleEndianWriter.WriteInt64(buffer, offset + 28, ClientStartTime.ToFileTimeUtc());
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            LittleEndianWriter.WriteUInt16(buffer, 2, (ushort)Dialects.Count);
+            LittleEndianWriter.WriteUInt16(buffer, 4, (ushort)SecurityMode);
+            LittleEndianWriter.WriteUInt16(buffer, 6, Reserved);
+            LittleEndianWriter.WriteUInt32(buffer, 8, (uint)Capabilities);
+            LittleEndianWriter.WriteGuidBytes(buffer, 12, ClientGuid);
+            LittleEndianWriter.WriteInt64(buffer, 28, ClientStartTime.ToFileTimeUtc());
             
-            for (int index = 0; index < Dialects.Count; index++)
+            for (var index = 0; index < Dialects.Count; index++)
             {
-                SMB2Dialect dialect = Dialects[index];
-                LittleEndianWriter.WriteUInt16(buffer, offset + 36 + index * 2, (ushort)dialect);
+                var dialect = Dialects[index];
+                LittleEndianWriter.WriteUInt16(buffer, 36 + index * 2, (ushort)dialect);
             }
         }
 
-        public override int CommandLength
+        public override void Dispose()
         {
-            get
-            {
-                return 36 + Dialects.Count * 2;
-            }
+            base.Dispose();
+            ObjectsPool<NegotiateRequest>.Return(this);
         }
+
+        public override int CommandLength => 36 + Dialects.Count * 2;
     }
 }

@@ -4,38 +4,33 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using Utilities;
+
+using System.Buffers;
+using MemoryPools.Memory;
 
 namespace SMBLibrary.NetBios
 {
     /// <summary>
     /// [RFC 1002] 4.3.7. SESSION KEEP ALIVE PACKET
     /// </summary>
-    public class SessionKeepAlivePacket : SessionPacket
+    public class SessionKeepAlivePacket : SessionPacket<SessionKeepAlivePacket>
     {
         public SessionKeepAlivePacket()
         {
-            this.Type = SessionPacketTypeName.SessionKeepAlive;
+            Type = SessionPacketTypeName.SessionKeepAlive;
         }
 
-        public SessionKeepAlivePacket(byte[] buffer, int offset) : base(buffer, offset)
+        public override IMemoryOwner<byte> GetBytes()
         {
-        }
-
-        public override byte[] GetBytes()
-        {
-            this.Trailer = new byte[0];
+            Trailer = MemoryOwner<byte>.Empty;
             return base.GetBytes();
         }
 
-        public override int Length
+        public override int Length => HeaderLength;
+        public override void Dispose()
         {
-            get
-            {
-                return HeaderLength;
-            }
+            base.Dispose();
+            ObjectsPool<SessionKeepAlivePacket>.Return(this);
         }
     }
 }

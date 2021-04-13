@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary
@@ -18,40 +20,29 @@ namespace SMBLibrary
         public const int FixedLength = 12;
 
         private uint FileNameLength;
-        public string FileName = String.Empty;
+        public IMemoryOwner<char> FileName = MemoryOwner<char>.Empty;
 
-        public FileNamesInformation()
+        public override QueryDirectoryFileInformation Init(Span<byte> buffer, int offset)
         {
-        }
-
-        public FileNamesInformation(byte[] buffer, int offset) : base(buffer, offset)
-        {
+            base.Init(buffer, offset);
             FileNameLength = LittleEndianConverter.ToUInt32(buffer, offset + 8);
-            FileName = ByteReader.ReadUTF16String(buffer, offset + 12, (int)FileNameLength / 2);
+            FileName = Arrays.Rent<char>((int)FileNameLength / 2);
+            ByteReader.ReadUTF16String(FileName.Memory.Span, buffer, offset + 12, (int)FileNameLength / 2);
+            return this;
         }
 
-        public override void WriteBytes(byte[] buffer, int offset)
+        public override void WriteBytes(Span<byte> buffer, int offset)
         {
             base.WriteBytes(buffer, offset);
-            FileNameLength = (uint)(FileName.Length * 2);
+            FileNameLength = (uint)(FileName.Memory.Length * 2);
             LittleEndianWriter.WriteUInt32(buffer, offset + 8, FileNameLength);
-            ByteWriter.WriteUTF16String(buffer, offset + 12, FileName);
+            BufferWriter.WriteUTF16String(buffer, offset + 12, FileName.Memory.Span);
         }
 
-        public override FileInformationClass FileInformationClass
-        {
-            get
-            {
-                return FileInformationClass.FileNamesInformation;
-            }
-        }
+        public override void Dispose() => ObjectsPool<FileNamesInformation>.Return(this);
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength + FileName.Length * 2;
-            }
-        }
+        public override FileInformationClass FileInformationClass => FileInformationClass.FileNamesInformation;
+
+        public override int Length => FixedLength + FileName.Memory.Length * 2;
     }
 }

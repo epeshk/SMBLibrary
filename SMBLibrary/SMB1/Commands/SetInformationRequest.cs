@@ -4,9 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.IO;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -21,39 +23,48 @@ namespace SMBLibrary.SMB1
         // Parameters:
         public SMBFileAttributes FileAttributes;
         public DateTime? LastWriteTime;
-        public byte[] Reserved; // 10 bytes
+        public IMemoryOwner<byte> Reserved; // 10 bytes
         // Data:
         public byte BufferFormat;
         public string FileName; // SMB_STRING
 
-        public SetInformationRequest() : base()
+        public SetInformationRequest()
         {
-            Reserved = new byte[10];
+            FileAttributes = default;
+            LastWriteTime = default;
+            Reserved = default; 
+            BufferFormat = default;
+            FileName = default;
+        
+            Reserved = Arrays.Rent(10);
             BufferFormat = SupportedBufferFormat;
         }
 
-        public SetInformationRequest(byte[] buffer, int offset, bool isUnicode) : base(buffer, offset, isUnicode)
+        public SetInformationRequest Init(Span<byte> buffer, int offset, bool isUnicode)
         {
-            FileAttributes = (SMBFileAttributes)LittleEndianConverter.ToUInt16(this.SMBParameters, 0);
-            LastWriteTime = UTimeHelper.ReadNullableUTime(this.SMBParameters, 2);
-            Reserved = ByteReader.ReadBytes(this.SMBParameters, 6, 10);
+            base.Init(buffer, offset, isUnicode);
+            FileAttributes = (SMBFileAttributes)LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 0);
+            LastWriteTime = UTimeHelper.ReadNullableUTime(SmbParameters.Memory.Span, 2);
+            Reserved = ByteReader.ReadBytes_Rent(SmbParameters.Memory.Span, 6, 10);
 
-            BufferFormat = ByteReader.ReadByte(this.SMBData, 0);
+            BufferFormat = ByteReader.ReadByte(SmbData.Memory.Span, 0);
             if (BufferFormat != SupportedBufferFormat)
             {
                 throw new InvalidDataException("Unsupported Buffer Format");
             }
-            FileName = SMB1Helper.ReadSMBString(this.SMBData, 1, isUnicode);
+            FileName = SMB1Helper.ReadSMBString(SmbData.Memory.Span, 1, isUnicode);
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            this.SMBParameters = new byte[ParametersLength];
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 0, (ushort)FileAttributes);
-            UTimeHelper.WriteUTime(this.SMBParameters, 2, LastWriteTime);
-            ByteWriter.WriteBytes(this.SMBParameters, 6, Reserved, 10);
+            SmbParameters = Arrays.Rent(ParametersLength);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 0, (ushort)FileAttributes);
+            UTimeHelper.WriteUTime(SmbParameters.Memory.Span, 2, LastWriteTime);
+            BufferWriter.WriteBytes(SmbParameters.Memory.Span, 6, Reserved.Memory.Span, 10);
 
-            int length = 1;
+            var length = 1;
             if (isUnicode)
             {
                 length += FileName.Length * 2 + 2;
@@ -62,19 +73,20 @@ namespace SMBLibrary.SMB1
             {
                 length += FileName.Length + 1;
             }
-            this.SMBData = new byte[length];
-            ByteWriter.WriteByte(this.SMBData, 0, BufferFormat);
-            SMB1Helper.WriteSMBString(this.SMBData, 1, isUnicode, FileName);
+            SmbData = Arrays.Rent(length);
+            BufferWriter.WriteByte(SmbData.Memory.Span, 0, BufferFormat);
+            SMB1Helper.WriteSMBString(SmbData.Memory.Span, 1, isUnicode, FileName);
             
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
+        public override CommandName CommandName => CommandName.SMB_COM_SET_INFORMATION;
+
+        public override void Dispose()
         {
-            get
-            {
-                return CommandName.SMB_COM_SET_INFORMATION;
-            }
+            base.Dispose();
+            Reserved?.Dispose();
+            Reserved = null;
         }
     }
 }

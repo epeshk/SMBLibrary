@@ -4,8 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using System.Text;
 using Utilities;
 
@@ -14,7 +14,7 @@ namespace SMBLibrary.Authentication.NTLM
     /// <summary>
     /// NTLMv2_CLIENT_CHALLENGE
     /// </summary>
-    public class NTLMv2ClientChallenge
+    public class NTLMv2ClientChallenge : IDisposable
     {
         public const int MinimumLength = 32;
         public const byte StructureVersion = 0x01;
@@ -31,6 +31,18 @@ namespace SMBLibrary.Authentication.NTLM
 
         public NTLMv2ClientChallenge()
         {
+        }
+
+        public void Dispose()
+        {
+            if(ClientChallenge != null) ExactArrayPool.Return(ClientChallenge);
+            for (int i = 0; i < AVPairs.Count; i++)
+            {
+                ExactArrayPool.Return(AVPairs[i].Value);
+            }
+
+            ClientChallenge = default;
+            AVPairs = default;
         }
 
         public NTLMv2ClientChallenge(DateTime timeStamp, byte[] clientChallenge, string domainName, string computerName)
@@ -57,31 +69,31 @@ namespace SMBLibrary.Authentication.NTLM
         {
         }
 
-        public NTLMv2ClientChallenge(byte[] buffer, int offset)
+        public NTLMv2ClientChallenge(Span<byte> buffer, int offset)
         {
             CurrentVersion = ByteReader.ReadByte(buffer, offset + 0);
             MaximumSupportedVersion = ByteReader.ReadByte(buffer, offset + 1);
             Reserved1 = LittleEndianConverter.ToUInt16(buffer, offset + 2);
             Reserved2 = LittleEndianConverter.ToUInt32(buffer, offset + 4);
             TimeStamp = FileTimeHelper.ReadFileTime(buffer, offset + 8);
-            ClientChallenge = ByteReader.ReadBytes(buffer, offset + 16, 8);
+            ClientChallenge = ByteReader.ReadBytes_RentArray(buffer, offset + 16, 8);
             Reserved3 = LittleEndianConverter.ToUInt32(buffer, offset + 24);
             AVPairs = AVPairUtils.ReadAVPairSequence(buffer, offset + 28);
         }
 
         public byte[] GetBytes()
         {
-            byte[] sequenceBytes = AVPairUtils.GetAVPairSequenceBytes(AVPairs);
+            var sequenceBytes = AVPairUtils.GetAVPairSequenceBytes(AVPairs);
             
-            byte[] buffer = new byte[28 + sequenceBytes.Length];
-            ByteWriter.WriteByte(buffer, 0, CurrentVersion);
-            ByteWriter.WriteByte(buffer, 1, MaximumSupportedVersion);
+            var buffer = new byte[28 + sequenceBytes.Length];
+            BufferWriter.WriteByte(buffer, 0, CurrentVersion);
+            BufferWriter.WriteByte(buffer, 1, MaximumSupportedVersion);
             LittleEndianWriter.WriteUInt16(buffer, 2, Reserved1);
             LittleEndianWriter.WriteUInt32(buffer, 4, Reserved2);
             FileTimeHelper.WriteFileTime(buffer, 8, TimeStamp);
-            ByteWriter.WriteBytes(buffer, 16, ClientChallenge, 8);
+            BufferWriter.WriteBytes(buffer, 16, ClientChallenge, 8);
             LittleEndianWriter.WriteUInt32(buffer, 24, Reserved3);
-            ByteWriter.WriteBytes(buffer, 28, sequenceBytes);
+            BufferWriter.WriteBytes(buffer, 28, sequenceBytes);
             return buffer;
         }
 
@@ -91,7 +103,7 @@ namespace SMBLibrary.Authentication.NTLM
         /// </summary>
         public byte[] GetBytesPadded()
         {
-            return ByteUtils.Concatenate(GetBytes(), new byte[4]);
+            return ByteUtils.Concatenate_Rental(GetBytes(), new byte[4]);
         }
     }
 }

@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -27,7 +29,7 @@ namespace SMBLibrary.SMB1
         {
         }
 
-        public NTTransactSetSecurityDescriptorRequest(byte[] parameters, byte[] data)
+        public NTTransactSetSecurityDescriptorRequest(Span<byte> parameters, Span<byte> data)
         {
             FID = LittleEndianConverter.ToUInt16(parameters, 0);
             Reserved = LittleEndianConverter.ToUInt16(parameters, 2);
@@ -36,26 +38,20 @@ namespace SMBLibrary.SMB1
             SecurityDescriptor = new SecurityDescriptor(data, 0);
         }
 
-        public override byte[] GetParameters(bool isUnicode)
+        public override IMemoryOwner<byte> GetParameters(bool isUnicode)
         {
-            byte[] parameters = new byte[ParametersLength];
+            var parameters = Arrays.Rent(ParametersLength);
             LittleEndianWriter.WriteUInt16(parameters, 0, FID);
             LittleEndianWriter.WriteUInt16(parameters, 2, Reserved);
             LittleEndianWriter.WriteUInt32(parameters, 4, (uint)SecurityInformation);
             return parameters;
         }
 
-        public override byte[] GetData()
+        public override IMemoryOwner<byte> GetData()
         {
             return SecurityDescriptor.GetBytes();
         }
 
-        public override NTTransactSubcommandName SubcommandName
-        {
-            get
-            {
-                return NTTransactSubcommandName.NT_TRANSACT_SET_SECURITY_DESC;
-            }
-        }
+        public override NTTransactSubcommandName SubcommandName => NTTransactSubcommandName.NT_TRANSACT_SET_SECURITY_DESC;
     }
 }

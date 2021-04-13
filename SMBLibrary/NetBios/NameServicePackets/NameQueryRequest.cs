@@ -4,11 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text;
-using Utilities;
 
 namespace SMBLibrary.NetBios
 {
@@ -29,7 +27,7 @@ namespace SMBLibrary.NetBios
             Question.Type = NameRecordType.NB;
         }
 
-        public NameQueryRequest(byte[] buffer, int offset)
+        public NameQueryRequest(Span<byte> buffer, int offset)
         {
             Header = new NameServicePacketHeader(buffer, ref offset);
             Question = new QuestionSection(buffer, ref offset);
@@ -37,7 +35,7 @@ namespace SMBLibrary.NetBios
 
         public byte[] GetBytes()
         {
-            MemoryStream stream = new MemoryStream();
+            var stream = new MemoryStream();
             Header.WriteBytes(stream);
             Question.WriteBytes(stream);
             return stream.ToArray();

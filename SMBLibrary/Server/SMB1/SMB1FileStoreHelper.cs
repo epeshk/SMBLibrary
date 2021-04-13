@@ -4,11 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using MemoryPools.Memory;
 using SMBLibrary.SMB1;
-using Utilities;
 
 namespace SMBLibrary.Server.SMB1
 {
@@ -18,7 +17,7 @@ namespace SMBLibrary.Server.SMB1
         {
             object handle;
             FileStatus fileStatus;
-            NTStatus createStatus = fileStore.CreateFile(out handle, out fileStatus, path, (AccessMask)DirectoryAccessMask.FILE_ADD_SUBDIRECTORY, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_CREATE, CreateOptions.FILE_DIRECTORY_FILE, securityContext);
+            var createStatus = fileStore.CreateFile(out handle, out fileStatus, Arrays.RentFrom<char>(path), (AccessMask)DirectoryAccessMask.FILE_ADD_SUBDIRECTORY, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_CREATE, CreateOptions.FILE_DIRECTORY_FILE, securityContext);
             if (createStatus != NTStatus.STATUS_SUCCESS)
             {
                 return createStatus;
@@ -41,20 +40,20 @@ namespace SMBLibrary.Server.SMB1
         {
             object handle;
             FileStatus fileStatus;
-            ShareAccess shareAccess = ShareAccess.Read | ShareAccess.Write | ShareAccess.Delete;
-            NTStatus status = fileStore.CreateFile(out handle, out fileStatus, path, AccessMask.DELETE, 0, shareAccess, CreateDisposition.FILE_OPEN, createOptions, securityContext);
+            var shareAccess = ShareAccess.Read | ShareAccess.Write | ShareAccess.Delete;
+            var status = fileStore.CreateFile(out handle, out fileStatus, Arrays.RentFrom<char>(path), AccessMask.DELETE, 0, shareAccess, CreateDisposition.FILE_OPEN, createOptions, securityContext);
             if (status != NTStatus.STATUS_SUCCESS)
             {
                 return status;
             }
-            FileDispositionInformation fileDispositionInfo = new FileDispositionInformation();
+            var fileDispositionInfo = new FileDispositionInformation();
             fileDispositionInfo.DeletePending = true;
             status = fileStore.SetFileInformation(handle, fileDispositionInfo);
             fileStore.CloseFile(handle);
             return status;
         }
 
-        public static NTStatus Rename(INTFileStore fileStore, string oldName, string newName, SMBFileAttributes searchAttributes, SecurityContext securityContext)
+        public static NTStatus Rename(INTFileStore fileStore, ReadOnlySpan<char> oldName, ReadOnlySpan<char> newName, SMBFileAttributes searchAttributes, SecurityContext securityContext)
         {
             object handle;
             FileStatus fileStatus;
@@ -65,15 +64,15 @@ namespace SMBLibrary.Server.SMB1
             {
                 createOptions = CreateOptions.FILE_NON_DIRECTORY_FILE;
             }
-            ShareAccess shareAccess = ShareAccess.Read | ShareAccess.Write | ShareAccess.Delete;
-            NTStatus status = fileStore.CreateFile(out handle, out fileStatus, oldName, AccessMask.DELETE, 0, shareAccess, CreateDisposition.FILE_OPEN, createOptions, securityContext);
+            var shareAccess = ShareAccess.Read | ShareAccess.Write | ShareAccess.Delete;
+            var status = fileStore.CreateFile(out handle, out fileStatus, Arrays.RentFrom(oldName), AccessMask.DELETE, 0, shareAccess, CreateDisposition.FILE_OPEN, createOptions, securityContext);
             if (status != NTStatus.STATUS_SUCCESS)
             {
                 return status;
             }
-            FileRenameInformationType2 renameInfo = new FileRenameInformationType2();
+            var renameInfo = new FileRenameInformationType2();
             renameInfo.ReplaceIfExists = false;
-            renameInfo.FileName = newName;
+            renameInfo.FileName = Arrays.RentFrom(newName);
             status = fileStore.SetFileInformation(handle, renameInfo);
             fileStore.CloseFile(handle);
             return status;
@@ -83,7 +82,7 @@ namespace SMBLibrary.Server.SMB1
         {
             object handle;
             FileStatus fileStatus;
-            NTStatus openStatus = fileStore.CreateFile(out handle, out fileStatus, path, (AccessMask)0, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, CreateOptions.FILE_DIRECTORY_FILE, securityContext);
+            var openStatus = fileStore.CreateFile(out handle, out fileStatus, Arrays.RentFrom<char>(path), 0, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, CreateOptions.FILE_DIRECTORY_FILE, securityContext);
             if (openStatus != NTStatus.STATUS_SUCCESS)
             {
                 return openStatus;
@@ -97,7 +96,7 @@ namespace SMBLibrary.Server.SMB1
         {
             object handle;
             FileStatus fileStatus;
-            NTStatus openStatus = fileStore.CreateFile(out handle, out fileStatus, path, (AccessMask)FileAccessMask.FILE_READ_ATTRIBUTES, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, 0, securityContext);
+            var openStatus = fileStore.CreateFile(out handle, out fileStatus, Arrays.RentFrom<char>(path), (AccessMask)FileAccessMask.FILE_READ_ATTRIBUTES, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, 0, securityContext);
             if (openStatus != NTStatus.STATUS_SUCCESS)
             {
                 fileInfo = null;
@@ -113,28 +112,28 @@ namespace SMBLibrary.Server.SMB1
         {
             object handle;
             FileStatus fileStatus;
-            NTStatus status = fileStore.CreateFile(out handle, out fileStatus, path, (AccessMask)FileAccessMask.FILE_WRITE_ATTRIBUTES, (FileAttributes)0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, 0, securityContext);
+            var status = fileStore.CreateFile(out handle, out fileStatus, Arrays.RentFrom<char>(path), (AccessMask)FileAccessMask.FILE_WRITE_ATTRIBUTES, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, 0, securityContext);
             if (status != NTStatus.STATUS_SUCCESS)
             {
                 return status;
             }
 
-            FileBasicInformation basicInfo = new FileBasicInformation();
+            var basicInfo = new FileBasicInformation();
             basicInfo.LastWriteTime = lastWriteTime;
 
             if ((fileAttributes & SMBFileAttributes.Hidden) > 0)
             {
-                basicInfo.FileAttributes |= FileAttributes.Hidden;
+                basicInfo.FileAttributes.Value |= FileAttributes.Hidden;
             }
 
             if ((fileAttributes & SMBFileAttributes.ReadOnly) > 0)
             {
-                basicInfo.FileAttributes |= FileAttributes.ReadOnly;
+                basicInfo.FileAttributes.Value |= FileAttributes.ReadOnly;
             }
 
             if ((fileAttributes & SMBFileAttributes.Archive) > 0)
             {
-                basicInfo.FileAttributes |= FileAttributes.Archive;
+                basicInfo.FileAttributes.Value |= FileAttributes.Archive;
             }
 
             status = fileStore.SetFileInformation(handle, basicInfo);
@@ -144,8 +143,8 @@ namespace SMBLibrary.Server.SMB1
 
         public static NTStatus SetInformation2(INTFileStore fileStore, object handle, DateTime? creationTime, DateTime? lastAccessTime, DateTime? lastWriteTime)
         {
-            FileNetworkOpenInformation fileInfo = NTFileStoreHelper.GetNetworkOpenInformation(fileStore, handle);
-            FileBasicInformation basicInfo = new FileBasicInformation();
+            var fileInfo = NTFileStoreHelper.GetNetworkOpenInformation(fileStore, handle);
+            var basicInfo = new FileBasicInformation();
             basicInfo.FileAttributes = fileInfo.FileAttributes;
             basicInfo.CreationTime = creationTime;
             basicInfo.LastAccessTime = lastAccessTime;
@@ -155,20 +154,20 @@ namespace SMBLibrary.Server.SMB1
 
         public static SMBFileAttributes GetFileAttributes(FileAttributes attributes)
         {
-            SMBFileAttributes result = SMBFileAttributes.Normal;
-            if ((attributes & FileAttributes.Hidden) > 0)
+            var result = SMBFileAttributes.Normal;
+            if ((attributes.Value & FileAttributes.Hidden) > 0)
             {
                 result |= SMBFileAttributes.Hidden;
             }
-            if ((attributes & FileAttributes.ReadOnly) > 0)
+            if ((attributes.Value & FileAttributes.ReadOnly) > 0)
             {
                 result |= SMBFileAttributes.ReadOnly;
             }
-            if ((attributes & FileAttributes.Archive) > 0)
+            if ((attributes.Value & FileAttributes.Archive) > 0)
             {
                 result |= SMBFileAttributes.Archive;
             }
-            if ((attributes & FileAttributes.Directory) > 0)
+            if ((attributes.Value & FileAttributes.Directory) > 0)
             {
                 result |= SMBFileAttributes.Directory;
             }

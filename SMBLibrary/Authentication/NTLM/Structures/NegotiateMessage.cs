@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.Authentication.NTLM
@@ -31,7 +32,7 @@ namespace SMBLibrary.Authentication.NTLM
             Workstation = String.Empty;
         }
 
-        public NegotiateMessage(byte[] buffer)
+        public NegotiateMessage(Span<byte> buffer)
         {
             Signature = ByteReader.ReadAnsiString(buffer, 0, 8);
             MessageType = (MessageTypeName)LittleEndianConverter.ToUInt32(buffer, 8);
@@ -44,39 +45,39 @@ namespace SMBLibrary.Authentication.NTLM
             }
         }
 
-        public byte[] GetBytes()
+        public IMemoryOwner<byte> GetBytes()
         {
             if ((NegotiateFlags & NegotiateFlags.DomainNameSupplied) == 0)
             {
-                DomainName = String.Empty;
+                DomainName = string.Empty;
             }
 
             if ((NegotiateFlags & NegotiateFlags.WorkstationNameSupplied) == 0)
             {
-                Workstation = String.Empty;
+                Workstation = string.Empty;
             }
 
-            int fixedLength = 32;
+            var fixedLength = 32;
             if ((NegotiateFlags & NegotiateFlags.Version) > 0)
             {
                 fixedLength += 8;
             }
-            int payloadLength = DomainName.Length * 2 + Workstation.Length * 2;
-            byte[] buffer = new byte[fixedLength + payloadLength];
-            ByteWriter.WriteAnsiString(buffer, 0, AuthenticateMessage.ValidSignature, 8);
-            LittleEndianWriter.WriteUInt32(buffer, 8, (uint)MessageType);
-            LittleEndianWriter.WriteUInt32(buffer, 12, (uint)NegotiateFlags);
+            var payloadLength = DomainName.Length * 2 + Workstation.Length * 2;
+            var buffer = Arrays.Rent(fixedLength + payloadLength);
+            BufferWriter.WriteAnsiString(buffer.Memory.Span, 0, AuthenticateMessage.ValidSignature, 8);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, 8, (uint)MessageType);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, 12, (uint)NegotiateFlags);
 
             if ((NegotiateFlags & NegotiateFlags.Version) > 0)
             {
-                Version.WriteBytes(buffer, 32);
+                Version.WriteBytes(buffer.Memory.Span, 32);
             }
 
-            int offset = fixedLength;
-            AuthenticationMessageUtils.WriteBufferPointer(buffer, 16, (ushort)(DomainName.Length * 2), (uint)offset);
-            ByteWriter.WriteUTF16String(buffer, ref offset, DomainName);
-            AuthenticationMessageUtils.WriteBufferPointer(buffer, 24, (ushort)(Workstation.Length * 2), (uint)offset);
-            ByteWriter.WriteUTF16String(buffer, ref offset, Workstation);
+            var offset = fixedLength;
+            AuthenticationMessageUtils.WriteBufferPointer(buffer.Memory.Span, 16, (ushort)(DomainName.Length * 2), (uint)offset);
+            BufferWriter.WriteUTF16String(buffer.Memory.Span, ref offset, DomainName);
+            AuthenticationMessageUtils.WriteBufferPointer(buffer.Memory.Span, 24, (ushort)(Workstation.Length * 2), (uint)offset);
+            BufferWriter.WriteUTF16String(buffer.Memory.Span, ref offset, Workstation);
 
             return buffer;
         }

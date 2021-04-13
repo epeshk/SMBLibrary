@@ -4,9 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using System.Text;
+
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -25,10 +25,10 @@ namespace SMBLibrary.SMB1
         public byte PipeNameLength;
         public string PipeName; // SMB_STRING (this field WILL be aligned to start on a 2-byte boundary from the start of the SMB header)
 
-        public TransactionQueryNamedPipeInfoResponse() : base()
+        public TransactionQueryNamedPipeInfoResponse()
         {}
 
-        public TransactionQueryNamedPipeInfoResponse(byte[] data, bool isUnicode) : base()
+        public TransactionQueryNamedPipeInfoResponse(byte[] data, bool isUnicode)
         {
             OutputBufferSize = LittleEndianConverter.ToUInt16(data, 0);
             InputBufferSize = LittleEndianConverter.ToUInt16(data, 2);
@@ -39,9 +39,9 @@ namespace SMBLibrary.SMB1
             PipeName = SMB1Helper.ReadSMBString(data, 8, isUnicode);
         }
 
-        public override byte[] GetData(bool isUnicode)
+        public override IMemoryOwner<byte> GetData(bool isUnicode)
         {
-            int length = 8;
+            var length = 8;
             if (isUnicode)
             {
                 length += PipeName.Length * 2 + 2;
@@ -50,22 +50,16 @@ namespace SMBLibrary.SMB1
             {
                 length += PipeName.Length + 1;
             }
-            byte[] data = new byte[length];
+            var data = Arrays.Rent(length);
             LittleEndianWriter.WriteUInt16(data, 0, OutputBufferSize);
             LittleEndianWriter.WriteUInt16(data, 2, InputBufferSize);
-            ByteWriter.WriteByte(data, 4, MaximumInstances);
-            ByteWriter.WriteByte(data, 5, CurrentInstances);
-            ByteWriter.WriteByte(data, 6, PipeNameLength);
+            BufferWriter.WriteByte(data, 4, MaximumInstances);
+            BufferWriter.WriteByte(data, 5, CurrentInstances);
+            BufferWriter.WriteByte(data, 6, PipeNameLength);
             SMB1Helper.WriteSMBString(data, 8, isUnicode, PipeName);
             return data;
         }
 
-        public override TransactionSubcommandName SubcommandName
-        {
-            get
-            {
-                return TransactionSubcommandName.TRANS_QUERY_NMPIPE_INFO;
-            }
-        }
+        public override TransactionSubcommandName SubcommandName => TransactionSubcommandName.TRANS_QUERY_NMPIPE_INFO;
     }
 }

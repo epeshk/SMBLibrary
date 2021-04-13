@@ -4,9 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace SMBLibrary.SMB1
 {
@@ -15,20 +14,20 @@ namespace SMBLibrary.SMB1
     /// </summary>
     public class DeleteDirectoryResponse : SMB1Command
     {
-        public DeleteDirectoryResponse() : base()
+        public override SMB1Command Init()
         {
+	        base.Init();
+
+	        return this;
         }
 
-        public DeleteDirectoryResponse(byte[] buffer, int offset) : base(buffer, offset, false)
+        public DeleteDirectoryResponse Init(Span<byte> buffer, int offset)
         {
+	        base.Init(buffer, offset, false);
+
+	        return this;
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_DELETE_DIRECTORY;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_DELETE_DIRECTORY;
     }
 }

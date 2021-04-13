@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -19,29 +20,23 @@ namespace SMBLibrary.SMB1
         // Setup:
         public ushort FID;
 
-        public TransactionPeekNamedPipeRequest() : base()
+        public TransactionPeekNamedPipeRequest()
         {
         }
 
-        public TransactionPeekNamedPipeRequest(byte[] setup) : base()
+        public TransactionPeekNamedPipeRequest(Span<byte> setup)
         {
             FID = LittleEndianConverter.ToUInt16(setup, 2);
         }
 
-        public override byte[] GetSetup()
+        public override IMemoryOwner<byte> GetSetup()
         {
-            byte[] setup = new byte[4];
-            LittleEndianWriter.WriteUInt16(setup, 0, (ushort)this.SubcommandName);
+            var setup = Arrays.Rent(4);
+            LittleEndianWriter.WriteUInt16(setup, 0, (ushort)SubcommandName);
             LittleEndianWriter.WriteUInt16(setup, 2, FID);
             return setup;
         }
 
-        public override TransactionSubcommandName SubcommandName
-        {
-            get
-            {
-                return TransactionSubcommandName.TRANS_PEEK_NMPIPE;
-            }
-        }
+        public override TransactionSubcommandName SubcommandName => TransactionSubcommandName.TRANS_PEEK_NMPIPE;
     }
 }

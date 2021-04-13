@@ -4,27 +4,28 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
+
+using System.Buffers;
 using System.Collections.Generic;
-using System.IO;
-using Utilities;
+using System.Threading;
+using SMBLibrary.Client;
 
 namespace SMBLibrary
 {
-    public delegate void OnNotifyChangeCompleted(NTStatus status, byte[] buffer, object context);
+    public delegate void OnNotifyChangeCompleted(NTStatus status, IMemoryOwner<byte> buffer, object context);
 
     /// <summary>
     /// A file store (a.k.a. object store) interface to allow access to a file system or a named pipe in an NT-like manner dictated by the SMB protocol.
     /// </summary>
     public interface INTFileStore
     {
-        NTStatus CreateFile(out object handle, out FileStatus fileStatus, string path, AccessMask desiredAccess, FileAttributes fileAttributes, ShareAccess shareAccess, CreateDisposition createDisposition, CreateOptions createOptions, SecurityContext securityContext);
+        NTStatus CreateFile(out object handle, out FileStatus fileStatus, IMemoryOwner<char> path, AccessMask desiredAccess, FileAttributes fileAttributes, ShareAccess shareAccess, CreateDisposition createDisposition, CreateOptions createOptions, SecurityContext securityContext);
 
         NTStatus CloseFile(object handle);
 
-        NTStatus ReadFile(out byte[] data, object handle, long offset, int maxCount);
+        NTStatus ReadFile(out IMemoryOwner<byte> data, object handle, long offset, int maxCount);
 
-        NTStatus WriteFile(out int numberOfBytesWritten, object handle, long offset, byte[] data);
+        NTStatus WriteFile(out int numberOfBytesWritten, object handle, long offset, IMemoryOwner<byte> data);
 
         NTStatus FlushFileBuffers(object handle);
 
@@ -32,8 +33,10 @@ namespace SMBLibrary
 
         NTStatus UnlockFile(object handle, long byteOffset, long length);
 
-        NTStatus QueryDirectory(out List<QueryDirectoryFileInformation> result, object handle, string fileName, FileInformationClass informationClass);
+        NTStatus QueryDirectory(out List<FindFilesQueryResult> result, object handle, string fileName, FileInformationClass informationClass);
 
+        IAsyncEnumerable<FindFilesQueryResult> QueryDirectoryAsync(object handle, string fileName, FileInformationClass informationClass, bool closeOnFinish, CancellationToken outerToken = default);
+        
         NTStatus GetFileInformation(out FileInformation result, object handle, FileInformationClass informationClass);
 
         NTStatus SetFileInformation(object handle, FileInformation information);
@@ -59,6 +62,6 @@ namespace SMBLibrary
 
         NTStatus Cancel(object ioRequest);
 
-        NTStatus DeviceIOControl(object handle, uint ctlCode, byte[] input, out byte[] output, int maxOutputLength);
+        NTStatus DeviceIOControl(object handle, uint ctlCode, IMemoryOwner<byte> input, out IMemoryOwner<byte> output, int maxOutputLength);
     }
 }

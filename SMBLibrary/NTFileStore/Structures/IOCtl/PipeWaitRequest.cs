@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary
@@ -21,38 +23,34 @@ namespace SMBLibrary
         private uint NameLength;
         public bool TimeSpecified;
         public byte Padding;
-        public string Name;
+        public IMemoryOwner<char> Name = MemoryOwner<char>.Empty;
 
         public PipeWaitRequest()
         {
         }
 
-        public PipeWaitRequest(byte[] buffer, int offset)
+        public PipeWaitRequest(Span<byte> buffer, int offset)
         {
             Timeout = LittleEndianConverter.ToUInt64(buffer, offset + 0);
             NameLength = LittleEndianConverter.ToUInt32(buffer, offset + 8);
             TimeSpecified = Convert.ToBoolean(ByteReader.ReadByte(buffer, offset + 12));
             Padding = ByteReader.ReadByte(buffer, offset + 13);
-            Name = ByteReader.ReadUTF16String(buffer, offset + 14, (int)(NameLength / 2));
+            Name = Arrays.Rent<char>((int) (NameLength / 2)); 
+            
+            ByteReader.ReadUTF16String(Name.Memory.Span, buffer, offset + 14, (int)(NameLength / 2)); 
         }
 
-        public byte[] GetBytes()
+        public IMemoryOwner<byte> GetBytes()
         {
-            byte[] buffer = new byte[this.Length];
+            var buffer = Arrays.Rent<byte>(Length);
             LittleEndianWriter.WriteUInt64(buffer, 0, Timeout);
-            LittleEndianWriter.WriteUInt32(buffer, 8, (uint)(Name.Length * 2));
-            ByteWriter.WriteByte(buffer, 12, Convert.ToByte(TimeSpecified));
-            ByteWriter.WriteByte(buffer, 13, Padding);
-            ByteWriter.WriteUTF16String(buffer, 14, Name);
+            LittleEndianWriter.WriteUInt32(buffer, 8, (uint)(Name.Memory.Length * 2));
+            BufferWriter.WriteByte(buffer, 12, Convert.ToByte(TimeSpecified));
+            BufferWriter.WriteByte(buffer, 13, Padding);
+            BufferWriter.WriteUTF16String(buffer, 14, Name.Memory.Span);
             return buffer;
         }
 
-        public int Length
-        {
-            get
-            {
-                return FixedLength + Name.Length * 2;
-            }
-        }
+        public int Length => FixedLength + Name.Memory.Length * 2;
     }
 }

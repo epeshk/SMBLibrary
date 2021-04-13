@@ -4,24 +4,25 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using Utilities;
+
+using MemoryPools.Memory;
 
 namespace SMBLibrary.NetBios
 {
     /// <summary>
     /// [RFC 1002] 4.3.6. SESSION MESSAGE PACKET
     /// </summary>
-    public class SessionMessagePacket : SessionPacket
+    public class SessionMessagePacket : SessionPacket<SessionMessagePacket>
     {
-        public SessionMessagePacket() : base()
+        public SessionMessagePacket()
         {
-            this.Type = SessionPacketTypeName.SessionMessage;
+            Type = SessionPacketTypeName.SessionMessage;
         }
-
-        public SessionMessagePacket(byte[] buffer, int offset) : base(buffer, offset)
+        
+        public override void Dispose()
         {
+            base.Dispose();
+            ObjectsPool<SessionMessagePacket>.Return(this);
         }
     }
 }

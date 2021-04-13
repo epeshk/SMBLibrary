@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
+
+using System.Buffers;
 using System.Collections.Generic;
-using Utilities;
+using MemoryPools.Memory;
 
 namespace SMBLibrary.SMB1
 {
@@ -16,25 +17,25 @@ namespace SMBLibrary.SMB1
     public class NTTransactNotifyChangeResponse : NTTransactSubcommand
     {
         // Parameters:
-        public byte[] FileNotifyInformationBytes;
+        public IMemoryOwner<byte> FileNotifyInformationBytes;
 
-        public NTTransactNotifyChangeResponse() : base()
+        public NTTransactNotifyChangeResponse()
         {
         }
 
-        public NTTransactNotifyChangeResponse(byte[] parameters) : base()
+        public NTTransactNotifyChangeResponse(IMemoryOwner<byte> parameters)
         {
-            FileNotifyInformationBytes = parameters;
+            FileNotifyInformationBytes = parameters.AddOwner();
         }
 
-        public override byte[] GetParameters(bool isUnicode)
+        public override IMemoryOwner<byte> GetParameters(bool isUnicode)
         {
             return FileNotifyInformationBytes;
         }
 
         public List<FileNotifyInformation> GetFileNotifyInformation()
         {
-            return FileNotifyInformation.ReadList(FileNotifyInformationBytes, 0);
+            return FileNotifyInformation.ReadList(FileNotifyInformationBytes.Memory.Span, 0);
         }
 
         public void SetFileNotifyInformation(List<FileNotifyInformation> notifyInformationList)
@@ -42,12 +43,13 @@ namespace SMBLibrary.SMB1
             FileNotifyInformationBytes = FileNotifyInformation.GetBytes(notifyInformationList);
         }
 
-        public override NTTransactSubcommandName SubcommandName
+        public override NTTransactSubcommandName SubcommandName => NTTransactSubcommandName.NT_TRANSACT_NOTIFY_CHANGE;
+
+        public override void Dispose()
         {
-            get
-            {
-                return NTTransactSubcommandName.NT_TRANSACT_NOTIFY_CHANGE;
-            }
+            base.Dispose();
+            FileNotifyInformationBytes.Dispose();
+            FileNotifyInformationBytes = null;
         }
     }
 }

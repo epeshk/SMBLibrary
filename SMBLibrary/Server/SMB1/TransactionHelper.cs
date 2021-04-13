@@ -4,12 +4,14 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using MemoryPools.Memory;
+using SMBLibrary.NetBios;
 using SMBLibrary.SMB1;
-using SMBLibrary.RPC;
-using SMBLibrary.Services;
 using Utilities;
 
 namespace SMBLibrary.Server.SMB1
@@ -22,43 +24,35 @@ namespace SMBLibrary.Server.SMB1
         /// </summary>
         internal static List<SMB1Command> GetTransactionResponse(SMB1Header header, TransactionRequest request, ISMBShare share, SMB1ConnectionState state)
         {
-            if (request.TransParameters.Length < request.TotalParameterCount ||
-                request.TransData.Length < request.TotalDataCount)
+            if (request.TransParameters.Length() < request.TotalParameterCount ||
+                request.TransData.Length() < request.TotalDataCount)
             {
                 // A secondary transaction request is pending
-                ProcessStateObject processState = state.CreateProcessState(header.PID);
+                var processState = state.CreateProcessState(header.PID);
                 processState.MaxParameterCount = request.MaxParameterCount;
                 processState.MaxDataCount = request.MaxDataCount;
                 processState.Timeout = request.Timeout;
                 processState.Name = request.Name;
                 processState.TransactionSetup = request.Setup;
-                processState.TransactionParameters = new byte[request.TotalParameterCount];
-                processState.TransactionData = new byte[request.TotalDataCount];
-                ByteWriter.WriteBytes(processState.TransactionParameters, 0, request.TransParameters);
-                ByteWriter.WriteBytes(processState.TransactionData, 0, request.TransData);
-                processState.TransactionParametersReceived += request.TransParameters.Length;
-                processState.TransactionDataReceived += request.TransData.Length;
+                processState.TransactionParameters = Arrays.RentFrom<byte>(request.TransParameters.Memory.Span);
+                processState.TransactionData = Arrays.RentFrom<byte>(request.TransData.Memory.Span);
+                processState.TransactionParametersReceived += request.TransParameters.Length();
+                processState.TransactionDataReceived += request.TransData.Length();
                 if (request is Transaction2Request)
                 {
                     return new Transaction2InterimResponse();
                 }
-                else
-                {
-                    return new TransactionInterimResponse();
-                }
+
+                return new TransactionInterimResponse();
             }
-            else
+
+            // We have a complete command
+            if (request is Transaction2Request)
             {
-                // We have a complete command
-                if (request is Transaction2Request)
-                {
-                    return GetCompleteTransaction2Response(header, request.MaxDataCount, request.Setup, request.TransParameters, request.TransData, share, state);
-                }
-                else
-                {
-                    return GetCompleteTransactionResponse(header, request.MaxDataCount, request.Timeout, request.Name, request.Setup, request.TransParameters, request.TransData, share, state);
-                }
+                return GetCompleteTransaction2Response(header, request.MaxDataCount, request.Setup, request.TransParameters, request.TransData, share, state);
             }
+
+            return GetCompleteTransactionResponse(header, request.MaxDataCount, request.Timeout, request.Name, request.Setup, request.TransParameters, request.TransData, share, state);
         }
 
         /// <summary>
@@ -68,44 +62,40 @@ namespace SMBLibrary.Server.SMB1
         /// </summary>
         internal static List<SMB1Command> GetTransactionResponse(SMB1Header header, TransactionSecondaryRequest request, ISMBShare share, SMB1ConnectionState state)
         {
-            ProcessStateObject processState = state.GetProcessState(header.PID);
+            var processState = state.GetProcessState(header.PID);
             if (processState == null)
             {
                 throw new InvalidDataException();
             }
-            ByteWriter.WriteBytes(processState.TransactionParameters, request.ParameterDisplacement, request.TransParameters);
-            ByteWriter.WriteBytes(processState.TransactionData, request.DataDisplacement, request.TransData);
+            BufferWriter.WriteBytes(processState.TransactionParameters.Memory.Span, request.ParameterDisplacement, request.TransParameters);
+            BufferWriter.WriteBytes(processState.TransactionData.Memory.Span, request.DataDisplacement, request.TransData);
             processState.TransactionParametersReceived += request.TransParameters.Length;
             processState.TransactionDataReceived += request.TransData.Length;
 
-            if (processState.TransactionParametersReceived < processState.TransactionParameters.Length ||
-                processState.TransactionDataReceived < processState.TransactionData.Length)
+            if (processState.TransactionParametersReceived < processState.TransactionParameters.Length() ||
+                processState.TransactionDataReceived < processState.TransactionData.Length())
             {
                 return new List<SMB1Command>();
             }
-            else
+
+            // We have a complete command
+            state.RemoveProcessState(header.PID);
+            if (request is Transaction2SecondaryRequest)
             {
-                // We have a complete command
-                state.RemoveProcessState(header.PID);
-                if (request is Transaction2SecondaryRequest)
-                {
-                    return GetCompleteTransaction2Response(header, processState.MaxDataCount, processState.TransactionSetup, processState.TransactionParameters, processState.TransactionData, share, state);
-                }
-                else
-                {
-                    return GetCompleteTransactionResponse(header, processState.MaxDataCount, processState.Timeout, processState.Name, processState.TransactionSetup, processState.TransactionParameters, processState.TransactionData, share, state);
-                }
+                return GetCompleteTransaction2Response(header, processState.MaxDataCount, processState.TransactionSetup, processState.TransactionParameters, processState.TransactionData, share, state);
             }
+
+            return GetCompleteTransactionResponse(header, processState.MaxDataCount, processState.Timeout, processState.Name, processState.TransactionSetup, processState.TransactionParameters, processState.TransactionData, share, state);
         }
 
-        internal static List<SMB1Command> GetCompleteTransactionResponse(SMB1Header header, uint maxDataCount, uint timeout, string name, byte[] requestSetup, byte[] requestParameters, byte[] requestData, ISMBShare share, SMB1ConnectionState state)
+        internal static List<SMB1Command> GetCompleteTransactionResponse(SMB1Header header, uint maxDataCount, uint timeout, string name, IMemoryOwner<byte> requestSetup, IMemoryOwner<byte> requestParameters, IMemoryOwner<byte> requestData, ISMBShare share, SMB1ConnectionState state)
         {
             if (String.Equals(name, @"\PIPE\lanman", StringComparison.OrdinalIgnoreCase))
             {
                 // [MS-RAP] Remote Administration Protocol request
                 state.LogToServer(Severity.Debug, "Remote Administration Protocol requests are not implemented");
                 header.Status = NTStatus.STATUS_NOT_IMPLEMENTED;
-                return new ErrorResponse(CommandName.SMB_COM_TRANSACTION);
+                return ObjectsPool<ErrorResponse>.Get().Init(CommandName.SMB_COM_TRANSACTION);
             }
 
             TransactionSubcommand subcommand;
@@ -116,7 +106,7 @@ namespace SMBLibrary.Server.SMB1
             catch
             {
                 header.Status = NTStatus.STATUS_INVALID_SMB;
-                return new ErrorResponse(CommandName.SMB_COM_TRANSACTION);
+                return ObjectsPool<ErrorResponse>.Get().Init(CommandName.SMB_COM_TRANSACTION);
             }
             state.LogToServer(Severity.Verbose, "Received complete SMB_COM_TRANSACTION subcommand: {0}", subcommand.SubcommandName);
             TransactionSubcommand subcommandResponse = null;
@@ -172,16 +162,16 @@ namespace SMBLibrary.Server.SMB1
 
             if (header.Status != NTStatus.STATUS_SUCCESS && (header.Status != NTStatus.STATUS_BUFFER_OVERFLOW || subcommandResponse == null))
             {
-                return new ErrorResponse(CommandName.SMB_COM_TRANSACTION);
+                return ObjectsPool<ErrorResponse>.Get().Init(CommandName.SMB_COM_TRANSACTION);
             }
 
-            byte[] responseSetup = subcommandResponse.GetSetup();
-            byte[] responseParameters = subcommandResponse.GetParameters();
-            byte[] responseData = subcommandResponse.GetData(header.UnicodeFlag);
-            return GetTransactionResponse(false, responseSetup, responseParameters, responseData, state.MaxBufferSize);
+            var responseSetup = subcommandResponse.GetSetup();
+            var responseParameters = subcommandResponse.GetParameters();
+            var responseData = subcommandResponse.GetData(header.UnicodeFlag);
+            return GetTransactionResponse(false, responseSetup.Memory.Span, responseParameters.Memory.Span, responseData.Memory.Span, state.MaxBufferSize);
         }
 
-        internal static List<SMB1Command> GetCompleteTransaction2Response(SMB1Header header, uint maxDataCount, byte[] requestSetup, byte[] requestParameters, byte[] requestData, ISMBShare share, SMB1ConnectionState state)
+        internal static List<SMB1Command> GetCompleteTransaction2Response(SMB1Header header, uint maxDataCount, IMemoryOwner<byte> requestSetup, IMemoryOwner<byte> requestParameters, IMemoryOwner<byte> requestData, ISMBShare share, SMB1ConnectionState state)
         {
             Transaction2Subcommand subcommand;
             try
@@ -191,7 +181,7 @@ namespace SMBLibrary.Server.SMB1
             catch
             {
                 header.Status = NTStatus.STATUS_INVALID_SMB;
-                return new ErrorResponse(CommandName.SMB_COM_TRANSACTION2);
+                return ObjectsPool<ErrorResponse>.Get().Init(CommandName.SMB_COM_TRANSACTION2);
             }
             state.LogToServer(Severity.Verbose, "Received complete SMB_COM_TRANSACTION2 subcommand: {0}", subcommand.SubcommandName);
             Transaction2Subcommand subcommandResponse = null;
@@ -243,49 +233,53 @@ namespace SMBLibrary.Server.SMB1
 
             if (header.Status != NTStatus.STATUS_SUCCESS && (header.Status != NTStatus.STATUS_BUFFER_OVERFLOW || subcommandResponse == null))
             {
-                return new ErrorResponse(CommandName.SMB_COM_TRANSACTION2);
+                return ObjectsPool<ErrorResponse>.Get().Init(CommandName.SMB_COM_TRANSACTION2);
             }
 
-            byte[] responseSetup = subcommandResponse.GetSetup();
-            byte[] responseParameters = subcommandResponse.GetParameters(header.UnicodeFlag);
-            byte[] responseData = subcommandResponse.GetData(header.UnicodeFlag);
-            return GetTransactionResponse(true, responseSetup, responseParameters, responseData, state.MaxBufferSize);
+            Span<byte> responseSetup = stackalloc byte[4];
+            subcommandResponse.GetSetupInto(responseSetup);
+            var responseParameters = subcommandResponse.GetParameters(header.UnicodeFlag);
+            var responseData = subcommandResponse.GetData(header.UnicodeFlag);
+            return GetTransactionResponse(true, responseSetup, responseParameters.Memory.Span, responseData.Memory.Span, state.MaxBufferSize);
         }
 
-        internal static List<SMB1Command> GetTransactionResponse(bool transaction2Response, byte[] responseSetup, byte[] responseParameters, byte[] responseData, int maxBufferSize)
+        internal static List<SMB1Command> GetTransactionResponse(bool transaction2Response, Span<byte> responseSetup, Span<byte> responseParameters, Span<byte> responseData, int maxBufferSize)
         {
-            List<SMB1Command> result = new List<SMB1Command>();
+            var result = new List<SMB1Command>();
             TransactionResponse response;
             if (transaction2Response)
             {
-                response = new Transaction2Response();
+                response = (Transaction2Response) ObjectsPool<Transaction2Response>.Get().Init();
             }
             else
             {
-                response = new TransactionResponse();
+                response = (TransactionResponse) ObjectsPool<TransactionResponse>.Get().Init();
             }
             result.Add(response);
-            int responseSize = TransactionResponse.CalculateMessageSize(responseSetup.Length, responseParameters.Length, responseData.Length);
+            var buf = Arrays.Rent(responseSetup.Length);
+            responseSetup.CopyTo(buf.Memory.Span);
+            var responseSize = TransactionResponse.CalculateMessageSize(responseSetup.Length, responseParameters.Length, responseData.Length);
             if (responseSize <= maxBufferSize)
             {
-                response.Setup = responseSetup;
+                response.Setup = buf;
                 response.TotalParameterCount = (ushort)responseParameters.Length;
                 response.TotalDataCount = (ushort)responseData.Length;
-                response.TransParameters = responseParameters;
-                response.TransData = responseData;
+                response.TransParameters = Arrays.RentFrom<byte>(responseParameters);
+                response.TransData = Arrays.RentFrom<byte>(responseData);
             }
             else
             {
-                int currentDataLength = maxBufferSize - (responseSize - responseData.Length);
-                byte[] buffer = new byte[currentDataLength];
-                Array.Copy(responseData, 0, buffer, 0, currentDataLength);
-                response.Setup = responseSetup;
+                var currentDataLength = maxBufferSize - (responseSize - responseData.Length);
+                var buffer = Arrays.Rent(currentDataLength);
+                responseData.CopyTo(buffer.Memory.Span);
+
+                response.Setup = buf;
                 response.TotalParameterCount = (ushort)responseParameters.Length;
                 response.TotalDataCount = (ushort)responseData.Length;
-                response.TransParameters = responseParameters;
+                response.TransParameters = Arrays.RentFrom<byte>(responseParameters);
                 response.TransData = buffer;
 
-                int dataBytesLeftToSend = responseData.Length - currentDataLength;
+                var dataBytesLeftToSend = responseData.Length - currentDataLength;
                 while (dataBytesLeftToSend > 0)
                 {
                     TransactionResponse additionalResponse;
@@ -303,13 +297,15 @@ namespace SMBLibrary.Server.SMB1
                     {
                         currentDataLength = maxBufferSize - (responseSize - dataBytesLeftToSend);
                     }
-                    buffer = new byte[currentDataLength];
-                    int dataBytesSent = responseData.Length - dataBytesLeftToSend;
-                    Array.Copy(responseData, dataBytesSent, buffer, 0, currentDataLength);
+                    var dataBytesSent = responseData.Length - dataBytesLeftToSend;
+
+                    buffer = Arrays.Rent(dataBytesSent);
+                    responseData.CopyTo(buffer.Memory.Span);
+                    
                     additionalResponse.TotalParameterCount = (ushort)responseParameters.Length;
                     additionalResponse.TotalDataCount = (ushort)responseData.Length;
                     additionalResponse.TransData = buffer;
-                    additionalResponse.ParameterDisplacement = (ushort)response.TransParameters.Length;
+                    additionalResponse.ParameterDisplacement = (ushort)response.TransParameters.Memory.Length;
                     additionalResponse.DataDisplacement = (ushort)dataBytesSent;
                     result.Add(additionalResponse);
 

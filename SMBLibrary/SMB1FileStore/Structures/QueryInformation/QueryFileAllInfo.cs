@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -31,19 +33,19 @@ namespace SMBLibrary.SMB1
         public ushort Reserved2;
         public uint EaSize;
         // uint FileNameLength; // In bytes
-        public string FileName; // Unicode
+        public IMemoryOwner<char> FileName; // Unicode
 
         public QueryFileAllInfo()
         {
         }
 
-        public QueryFileAllInfo(byte[] buffer, int offset)
+        public QueryFileAllInfo(Span<byte> buffer, int offset)
         {
             CreationTime = FileTimeHelper.ReadNullableFileTime(buffer, ref offset);
             LastAccessTime = FileTimeHelper.ReadNullableFileTime(buffer, ref offset);
             LastWriteTime = FileTimeHelper.ReadNullableFileTime(buffer, ref offset);
             LastChangeTime = FileTimeHelper.ReadNullableFileTime(buffer, ref offset);
-            ExtFileAttributes = (ExtendedFileAttributes)LittleEndianReader.ReadUInt32(buffer, ref offset);
+            ExtFileAttributes = LittleEndianReader.ReadUInt32(buffer, ref offset);
             Reserved1 = LittleEndianReader.ReadUInt32(buffer, ref offset);
             AllocationSize = LittleEndianReader.ReadInt64(buffer, ref offset);
             EndOfFile = LittleEndianReader.ReadInt64(buffer, ref offset);
@@ -52,39 +54,35 @@ namespace SMBLibrary.SMB1
             Directory = (ByteReader.ReadByte(buffer, ref offset) > 0);
             Reserved2 = LittleEndianReader.ReadUInt16(buffer, ref offset);
             EaSize = LittleEndianReader.ReadUInt32(buffer, ref offset);
-            uint fileNameLength = LittleEndianReader.ReadUInt32(buffer, ref offset);
-            FileName = ByteReader.ReadUTF16String(buffer, ref offset, (int)(fileNameLength / 2));
+            var fileNameLength = LittleEndianReader.ReadUInt32(buffer, ref offset);
+            FileName = Arrays.Rent<char>((int) (fileNameLength / 2));
+                
+            ByteReader.ReadUTF16String(FileName.Memory.Span, buffer, ref offset, (int)(fileNameLength / 2));
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            uint fileNameLength = (uint)(FileName.Length * 2);
-            byte[] buffer = new byte[FixedLength + fileNameLength];
-            int offset = 0;
-            FileTimeHelper.WriteFileTime(buffer, ref offset, CreationTime);
-            FileTimeHelper.WriteFileTime(buffer, ref offset, LastAccessTime);
-            FileTimeHelper.WriteFileTime(buffer, ref offset, LastWriteTime);
-            FileTimeHelper.WriteFileTime(buffer, ref offset, LastChangeTime);
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, (uint)ExtFileAttributes);
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, Reserved1); 
-            LittleEndianWriter.WriteInt64(buffer, ref offset, AllocationSize);
-            LittleEndianWriter.WriteInt64(buffer, ref offset, EndOfFile);
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, NumberOfLinks);
-            ByteWriter.WriteByte(buffer, ref offset, Convert.ToByte(DeletePending));
-            ByteWriter.WriteByte(buffer, ref offset, Convert.ToByte(Directory));
-            LittleEndianWriter.WriteUInt16(buffer, ref offset, Reserved2);
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, EaSize);
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, fileNameLength);
-            ByteWriter.WriteUTF16String(buffer, ref offset, FileName);
+            var fileNameLength = (uint)(FileName.Memory.Length * 2);
+            var buffer = Arrays.Rent((int) (FixedLength + fileNameLength));
+            var offset = 0;
+            FileTimeHelper.WriteFileTime(buffer.Memory.Span, ref offset, CreationTime);
+            FileTimeHelper.WriteFileTime(buffer.Memory.Span, ref offset, LastAccessTime);
+            FileTimeHelper.WriteFileTime(buffer.Memory.Span, ref offset, LastWriteTime);
+            FileTimeHelper.WriteFileTime(buffer.Memory.Span, ref offset, LastChangeTime);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, (uint)ExtFileAttributes);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, Reserved1); 
+            LittleEndianWriter.WriteInt64(buffer.Memory.Span, ref offset, AllocationSize);
+            LittleEndianWriter.WriteInt64(buffer.Memory.Span, ref offset, EndOfFile);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, NumberOfLinks);
+            BufferWriter.WriteByte(buffer.Memory.Span, ref offset, Convert.ToByte(DeletePending));
+            BufferWriter.WriteByte(buffer.Memory.Span, ref offset, Convert.ToByte(Directory));
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, ref offset, Reserved2);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, EaSize);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, fileNameLength);
+            BufferWriter.WriteUTF16String(buffer.Memory.Span, ref offset, FileName.Memory.Span);
             return buffer;
         }
 
-        public override QueryInformationLevel InformationLevel
-        {
-            get
-            {
-                return QueryInformationLevel.SMB_QUERY_FILE_ALL_INFO;
-            }
-        }
+        public override QueryInformationLevel InformationLevel => QueryInformationLevel.SMB_QUERY_FILE_ALL_INFO;
     }
 }

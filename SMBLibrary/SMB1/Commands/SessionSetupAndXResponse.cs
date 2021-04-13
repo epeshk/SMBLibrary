@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -27,65 +28,67 @@ namespace SMBLibrary.SMB1
         public string NativeLanMan;  // SMB_STRING (this field WILL be aligned to start on a 2-byte boundary from the start of the SMB header)
         public string PrimaryDomain; // SMB_STRING (this field WILL be aligned to start on a 2-byte boundary from the start of the SMB header)
 
-        public SessionSetupAndXResponse() : base()
+        public SessionSetupAndXResponse Init()
         {
+            base.Init();
+            Action = default;
             NativeOS = String.Empty;
             NativeLanMan = String.Empty;
             PrimaryDomain = String.Empty;
+
+            return this;
         }
 
-        public SessionSetupAndXResponse(byte[] buffer, int offset, bool isUnicode) : base(buffer, offset, isUnicode)
+        public SessionSetupAndXResponse Init(Span<byte> buffer, int offset, bool isUnicode)
         {
-            Action = (SessionSetupAction)LittleEndianConverter.ToUInt16(this.SMBParameters, 4);
+            base.Init(buffer, offset, isUnicode);
+            
+            Action = (SessionSetupAction)LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 4);
 
-            int dataOffset = 0;
+            var dataOffset = 0;
             if (isUnicode)
             {
                 // A Unicode string MUST be aligned to a 16-bit boundary with respect to the beginning of the SMB Header.
                 // Note: SMBData starts at an odd offset.
                 dataOffset++;
             }
-            NativeOS = SMB1Helper.ReadSMBString(this.SMBData, ref dataOffset, isUnicode);
-            NativeLanMan = SMB1Helper.ReadSMBString(this.SMBData, ref dataOffset, isUnicode);
-            if ((this.SMBData.Length - dataOffset) % 2 == 1)
+            NativeOS = SMB1Helper.ReadSMBString(SmbData.Memory.Span, ref dataOffset, isUnicode);
+            NativeLanMan = SMB1Helper.ReadSMBString(SmbData.Memory.Span, ref dataOffset, isUnicode);
+            if ((SmbData.Length() - dataOffset) % 2 == 1)
             {
                 // Workaround for a single terminating null byte
-                this.SMBData = ByteUtils.Concatenate(this.SMBData, new byte[1]);
+                SmbData = ByteUtils.Concatenate(SmbData.Memory.Span, new byte[1]);
             }
-            PrimaryDomain = SMB1Helper.ReadSMBString(this.SMBData, ref dataOffset, isUnicode);
+            PrimaryDomain = SMB1Helper.ReadSMBString(SmbData.Memory.Span, ref dataOffset, isUnicode);
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            this.SMBParameters = new byte[ParametersLength];
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 4, (ushort)Action);
+            SmbParameters = Arrays.Rent(ParametersLength);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 4, (ushort)Action);
 
-            int offset = 0;
+            var offset = 0;
             if (isUnicode)
             {
                 // A Unicode string MUST be aligned to a 16-bit boundary with respect to the beginning of the SMB Header.
                 // Note: SMBData starts at an odd offset.
-                int padding = 1;
-                this.SMBData = new byte[padding + NativeOS.Length * 2 + NativeLanMan.Length * 2 + PrimaryDomain.Length * 2 + 6];
+                var padding = 1;
+                SmbData = Arrays.Rent(padding + NativeOS.Length * 2 + NativeLanMan.Length * 2 + PrimaryDomain.Length * 2 + 6);
                 offset = padding;
             }
             else
             {
-                this.SMBData = new byte[NativeOS.Length + NativeLanMan.Length + PrimaryDomain.Length + 3];
+                SmbData = Arrays.Rent(NativeOS.Length + NativeLanMan.Length + PrimaryDomain.Length + 3);
             }
-            SMB1Helper.WriteSMBString(this.SMBData, ref offset, isUnicode, NativeOS);
-            SMB1Helper.WriteSMBString(this.SMBData, ref offset, isUnicode, NativeLanMan);
-            SMB1Helper.WriteSMBString(this.SMBData, ref offset, isUnicode, PrimaryDomain);
+            SMB1Helper.WriteSMBString(SmbData.Memory.Span, ref offset, isUnicode, NativeOS);
+            SMB1Helper.WriteSMBString(SmbData.Memory.Span, ref offset, isUnicode, NativeLanMan);
+            SMB1Helper.WriteSMBString(SmbData.Memory.Span, ref offset, isUnicode, PrimaryDomain);
 
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_SESSION_SETUP_ANDX;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_SESSION_SETUP_ANDX;
     }
 }

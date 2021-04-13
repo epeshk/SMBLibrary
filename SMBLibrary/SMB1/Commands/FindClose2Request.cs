@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -14,21 +12,21 @@ namespace SMBLibrary.SMB1
         // Parameters:
         public ushort SearchHandle;
 
-        public FindClose2Request() : base()
+        public override SMB1Command Init()
         {
+            base.Init();
+
+            return this;
         }
 
-        public FindClose2Request(byte[] buffer, int offset) : base(buffer, offset, false)
+        public FindClose2Request Init(Span<byte> buffer, int offset)
         {
-            SearchHandle = LittleEndianConverter.ToUInt16(this.SMBParameters, 0);
+            base.Init(buffer, offset, false);
+            SearchHandle = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 0);
+
+            return this;
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_FIND_CLOSE2;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_FIND_CLOSE2;
     }
 }

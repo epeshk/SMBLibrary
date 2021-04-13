@@ -4,10 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.IO;
-using Utilities;
+using MemoryPools.Memory;
 
 namespace SMBLibrary
 {
@@ -19,14 +18,14 @@ namespace SMBLibrary
             {
                 case FileSystemInformationClass.FileFsVolumeInformation:
                     {
-                        FileFsVolumeInformation information = new FileFsVolumeInformation();
+                        var information = new FileFsVolumeInformation();
                         information.SupportsObjects = false;
                         result = information;
                         return NTStatus.STATUS_SUCCESS;
                     }
                 case FileSystemInformationClass.FileFsSizeInformation:
                     {
-                        FileFsSizeInformation information = new FileFsSizeInformation();
+                        var information = new FileFsSizeInformation();
                         information.TotalAllocationUnits = m_fileSystem.Size / ClusterSize;
                         information.AvailableAllocationUnits = m_fileSystem.FreeSpace / ClusterSize;
                         information.SectorsPerAllocationUnit = ClusterSize / BytesPerSector;
@@ -36,7 +35,7 @@ namespace SMBLibrary
                     }
                 case FileSystemInformationClass.FileFsDeviceInformation:
                     {
-                        FileFsDeviceInformation information = new FileFsDeviceInformation();
+                        var information = new FileFsDeviceInformation();
                         information.DeviceType = DeviceType.Disk;
                         information.Characteristics = DeviceCharacteristics.IsMounted;
                         result = information;
@@ -44,16 +43,16 @@ namespace SMBLibrary
                     }
                 case FileSystemInformationClass.FileFsAttributeInformation:
                     {
-                        FileFsAttributeInformation information = new FileFsAttributeInformation();
+                        var information = new FileFsAttributeInformation();
                         information.FileSystemAttributes = FileSystemAttributes.CasePreservedNamed | FileSystemAttributes.UnicodeOnDisk;
                         information.MaximumComponentNameLength = 255;
-                        information.FileSystemName = m_fileSystem.Name;
+                        information.FileSystemName = Arrays.RentFrom<char>(m_fileSystem.Name);
                         result = information;
                         return NTStatus.STATUS_SUCCESS;
                     }
                 case FileSystemInformationClass.FileFsControlInformation:
                     {
-                        FileFsControlInformation information = new FileFsControlInformation();
+                        var information = new FileFsControlInformation();
                         information.FileSystemControlFlags = FileSystemControlFlags.ContentIndexingDisabled;
                         information.DefaultQuotaThreshold = UInt64.MaxValue;
                         information.DefaultQuotaLimit = UInt64.MaxValue;
@@ -62,7 +61,7 @@ namespace SMBLibrary
                     }
                 case FileSystemInformationClass.FileFsFullSizeInformation:
                     {
-                        FileFsFullSizeInformation information = new FileFsFullSizeInformation();
+                        var information = new FileFsFullSizeInformation();
                         information.TotalAllocationUnits = m_fileSystem.Size / ClusterSize;
                         information.CallerAvailableAllocationUnits = m_fileSystem.FreeSpace / ClusterSize;
                         information.ActualAvailableAllocationUnits = m_fileSystem.FreeSpace / ClusterSize;
@@ -80,7 +79,7 @@ namespace SMBLibrary
                     }
                 case FileSystemInformationClass.FileFsSectorSizeInformation:
                     {
-                        FileFsSectorSizeInformation information = new FileFsSectorSizeInformation();
+                        var information = new FileFsSectorSizeInformation();
                         information.LogicalBytesPerSector = BytesPerSector;
                         information.PhysicalBytesPerSectorForAtomicity = BytesPerSector;
                         information.PhysicalBytesPerSectorForPerformance = BytesPerSector;

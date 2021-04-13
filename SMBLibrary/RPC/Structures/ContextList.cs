@@ -4,9 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.RPC
@@ -21,51 +21,51 @@ namespace SMBLibrary.RPC
         public byte Reserved1;
         public ushort Reserved2;
 
-        public ContextList() : base()
+        public ContextList()
         {
         }
 
-        public ContextList(byte[] buffer, int offset) : base()
+        public ContextList(Span<byte> buffer, int offset)
         {
-            byte numberOfContextElements = ByteReader.ReadByte(buffer, offset + 0);
+            var numberOfContextElements = ByteReader.ReadByte(buffer, offset + 0);
             Reserved1 = ByteReader.ReadByte(buffer, offset + 1);
             Reserved2 = LittleEndianConverter.ToUInt16(buffer, offset + 2);
             offset += 4;
-            for (int index = 0; index < numberOfContextElements; index++)
+            for (var index = 0; index < numberOfContextElements; index++)
             {
-                ContextElement element = new ContextElement(buffer, offset);
-                this.Add(element);
+                var element = new ContextElement(buffer, offset);
+                Add(element);
                 offset += element.Length;
             }
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
-            byte numberOfContextElements = (byte)this.Count;
+            var numberOfContextElements = (byte)Count;
 
-            ByteWriter.WriteByte(buffer, offset + 0, numberOfContextElements);
-            ByteWriter.WriteByte(buffer, offset + 1, Reserved1);
+            BufferWriter.WriteByte(buffer, offset + 0, numberOfContextElements);
+            BufferWriter.WriteByte(buffer, offset + 1, Reserved1);
             LittleEndianWriter.WriteUInt16(buffer, offset + 2, Reserved2);
             offset += 4;
-            for (int index = 0; index < numberOfContextElements; index++)
+            for (var index = 0; index < numberOfContextElements; index++)
             {
                 this[index].WriteBytes(buffer, offset);
                 offset += this[index].Length;
             }
         }
 
-        public void WriteBytes(byte[] buffer, ref int offset)
+        public void WriteBytes(Span<byte> buffer, ref int offset)
         {
             WriteBytes(buffer, offset);
-            offset += this.Length;
+            offset += Length;
         }
 
         public int Length
         {
             get
             {
-                int length = 4;
-                for (int index = 0; index < this.Count; index++)
+                var length = 4;
+                for (var index = 0; index < Count; index++)
                 {
                     length += this[index].Length;
                 }

@@ -4,12 +4,20 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
+using MemoryPools.Memory;
 using SMBLibrary.Authentication.GSSAPI;
 using SMBLibrary.NetBios;
+using SMBLibrary.SMB1;
 using SMBLibrary.SMB2;
 using Utilities;
+using Capabilities = SMBLibrary.SMB2.Capabilities;
+using ErrorResponse = SMBLibrary.SMB2.ErrorResponse;
+using NegotiateRequest = SMBLibrary.SMB2.NegotiateRequest;
+using NegotiateResponse = SMBLibrary.SMB2.NegotiateResponse;
+using SecurityMode = SMBLibrary.SMB2.SecurityMode;
 
 namespace SMBLibrary.Server.SMB2
 {
@@ -30,7 +38,7 @@ namespace SMBLibrary.Server.SMB2
         // Special case - SMB2 client initially connecting using SMB1
         internal static SMB2Command GetNegotiateResponse(List<string> smb2Dialects, GSSProvider securityProvider, ConnectionState state, SMBTransportType transportType, Guid serverGuid, DateTime serverStartTime)
         {
-            NegotiateResponse response = new NegotiateResponse();
+            var response = new NegotiateResponse();
             response.Header.Credits = 1;
 
             if (smb2Dialects.Contains(SMB2xxxDialect))
@@ -55,7 +63,7 @@ namespace SMBLibrary.Server.SMB2
                 response.MaxReadSize = ServerMaxReadSizeLargeMTU;
                 response.MaxWriteSize = ServerMaxWriteSizeLargeMTU;
                 // [MS-SMB2] 3.3.5.2 Receiving Any Message - If the length of the message exceeds Connection.MaxTransactSize + 256, the server MUST disconnect the connection.
-                int maxPacketSize = SessionPacket.HeaderLength + (int)ServerMaxTransactSizeLargeMTU + 256;
+                var maxPacketSize = SessionPacketBase.HeaderLength + (int)ServerMaxTransactSizeLargeMTU + 256;
                 if (maxPacketSize > state.ReceiveBuffer.Buffer.Length)
                 {
                     state.ReceiveBuffer.IncreaseBufferSize(maxPacketSize);
@@ -75,7 +83,7 @@ namespace SMBLibrary.Server.SMB2
 
         internal static SMB2Command GetNegotiateResponse(NegotiateRequest request, GSSProvider securityProvider, ConnectionState state, SMBTransportType transportType, Guid serverGuid, DateTime serverStartTime)
         {
-            NegotiateResponse response = new NegotiateResponse();
+            var response = new NegotiateResponse();
             if (request.Dialects.Contains(SMB2Dialect.SMB210))
             {
                 state.Dialect = SMBDialect.SMB210;
@@ -89,7 +97,7 @@ namespace SMBLibrary.Server.SMB2
             else
             {
                 state.LogToServer(Severity.Verbose, "Negotiate failure: None of the requested SMB2 dialects is supported");
-                return new ErrorResponse(request.CommandName, NTStatus.STATUS_NOT_SUPPORTED);
+                return ObjectsPool<ErrorResponse>.Get().Init(request.CommandName, NTStatus.STATUS_NOT_SUPPORTED);
             }
             response.SecurityMode = SecurityMode.SigningEnabled;
             response.ServerGuid = serverGuid;
@@ -100,7 +108,7 @@ namespace SMBLibrary.Server.SMB2
                 response.MaxReadSize = ServerMaxReadSizeLargeMTU;
                 response.MaxWriteSize = ServerMaxWriteSizeLargeMTU;
                 // [MS-SMB2] 3.3.5.2 Receiving Any Message - If the length of the message exceeds Connection.MaxTransactSize + 256, the server MUST disconnect the connection.
-                int maxPacketSize = SessionPacket.HeaderLength + (int)ServerMaxTransactSizeLargeMTU + 256;
+                var maxPacketSize = SessionPacketBase.HeaderLength + (int)ServerMaxTransactSizeLargeMTU + 256;
                 if (maxPacketSize > state.ReceiveBuffer.Buffer.Length)
                 {
                     state.ReceiveBuffer.IncreaseBufferSize(maxPacketSize);
@@ -118,11 +126,11 @@ namespace SMBLibrary.Server.SMB2
             return response;
         }
 
-        internal static List<string> FindSMB2Dialects(SMBLibrary.SMB1.SMB1Message message)
+        internal static List<string> FindSMB2Dialects(SMB1Message message)
         {
             if (message.Commands.Count > 0 && message.Commands[0] is SMBLibrary.SMB1.NegotiateRequest)
             {
-                SMBLibrary.SMB1.NegotiateRequest request = (SMBLibrary.SMB1.NegotiateRequest)message.Commands[0];
+                var request = (SMBLibrary.SMB1.NegotiateRequest)message.Commands[0];
                 return FindSMB2Dialects(request);
             }
             return new List<string>();
@@ -130,7 +138,7 @@ namespace SMBLibrary.Server.SMB2
 
         internal static List<string> FindSMB2Dialects(SMBLibrary.SMB1.NegotiateRequest request)
         {
-            List<string> result = new List<string>();
+            var result = new List<string>();
             if (request.Dialects.Contains(SMB2002Dialect))
             {
                 result.Add(SMB2002Dialect);

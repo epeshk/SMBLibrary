@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -30,35 +31,29 @@ namespace SMBLibrary.SMB1
             Reserved = new byte[3];
         }
 
-        public QueryFileCompressionInfo(byte[] buffer, int offset)
+        public QueryFileCompressionInfo(Span<byte> buffer, int offset)
         {
             CompressedFileSize = LittleEndianReader.ReadInt64(buffer, ref offset);
             CompressionFormat = (CompressionFormat)LittleEndianReader.ReadUInt16(buffer, ref offset);
             CompressionUnitShift = ByteReader.ReadByte(buffer, ref offset);
             ChunkShift = ByteReader.ReadByte(buffer, ref offset);
             ClusterShift = ByteReader.ReadByte(buffer, ref offset);
-            Reserved = ByteReader.ReadBytes(buffer, ref offset, 3);
+            Reserved = ByteReader.ReadBytes_RentArray(buffer, ref offset, 3);
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            byte[] buffer = new byte[Length];
-            int offset = 0;
-            LittleEndianWriter.WriteInt64(buffer, ref offset, CompressedFileSize);
-            LittleEndianWriter.WriteUInt16(buffer, ref offset, (ushort)CompressionFormat);
-            ByteWriter.WriteByte(buffer, ref offset, CompressionUnitShift);
-            ByteWriter.WriteByte(buffer, ref offset, ChunkShift);
-            ByteWriter.WriteByte(buffer, ref offset, ClusterShift);
-            ByteWriter.WriteBytes(buffer, ref offset, Reserved, 3);
+            var buffer = Arrays.Rent(Length);
+            var offset = 0;
+            LittleEndianWriter.WriteInt64(buffer.Memory.Span, ref offset, CompressedFileSize);
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, ref offset, (ushort)CompressionFormat);
+            BufferWriter.WriteByte(buffer.Memory.Span, ref offset, CompressionUnitShift);
+            BufferWriter.WriteByte(buffer.Memory.Span, ref offset, ChunkShift);
+            BufferWriter.WriteByte(buffer.Memory.Span, ref offset, ClusterShift);
+            BufferWriter.WriteBytes(buffer.Memory.Span, ref offset, Reserved, 3);
             return buffer;
         }
 
-        public override QueryInformationLevel InformationLevel
-        {
-            get
-            {
-                return QueryInformationLevel.SMB_QUERY_FILE_COMPRESSION_INFO;
-            }
-        }
+        public override QueryInformationLevel InformationLevel => QueryInformationLevel.SMB_QUERY_FILE_COMPRESSION_INFO;
     }
 }

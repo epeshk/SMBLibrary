@@ -4,11 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text;
-using SMBLibrary.Services;
+using MemoryPools.Memory;
 using SMBLibrary.SMB1;
 using Utilities;
 
@@ -18,9 +17,9 @@ namespace SMBLibrary.Server.SMB1
     {
         internal static SMB1Command GetOpenAndXResponse(SMB1Header header, OpenAndXRequest request, ISMBShare share, SMB1ConnectionState state)
         {
-            SMB1Session session = state.GetSession(header.UID);
-            bool isExtended = (request.Flags & OpenFlags.SMB_OPEN_EXTENDED_RESPONSE) > 0;
-            string path = request.FileName;
+            var session = state.GetSession(header.UID);
+            var isExtended = (request.Flags & OpenFlags.SMB_OPEN_EXTENDED_RESPONSE) > 0;
+            var path = request.FileName;
             if (!path.StartsWith(@"\"))
             {
                 path = @"\" + path;
@@ -39,65 +38,59 @@ namespace SMBLibrary.Server.SMB1
             {
                 // Invalid input according to MS-CIFS
                 header.Status = NTStatus.STATUS_OS2_INVALID_ACCESS;
-                return new ErrorResponse(request.CommandName);
+                return ObjectsPool<ErrorResponse>.Get().Init(request.CommandName);
             }
-            CreateOptions createOptions = ToCreateOptions(request.AccessMode);
+            var createOptions = ToCreateOptions(request.AccessMode);
 
-            FileAccess createAccess = NTFileStoreHelper.ToCreateFileAccess(desiredAccess, createDisposition);
+            var createAccess = NTFileStoreHelper.ToCreateFileAccess(desiredAccess, createDisposition);
             if (share is FileSystemShare)
             {
                 if (!((FileSystemShare)share).HasAccess(session.SecurityContext, path, createAccess))
                 {
                     state.LogToServer(Severity.Verbose, "OpenAndX: Opening '{0}{1}' failed. User '{2}' was denied access.", share.Name, request.FileName, session.UserName);
                     header.Status = NTStatus.STATUS_ACCESS_DENIED;
-                    return new ErrorResponse(request.CommandName);
+                    return ObjectsPool<ErrorResponse>.Get().Init(request.CommandName);
                 }
             }
 
             object handle;
             FileStatus fileStatus;
-            header.Status = share.FileStore.CreateFile(out handle, out fileStatus, path, desiredAccess, 0, shareAccess, createDisposition, createOptions, session.SecurityContext);
+            header.Status = share.FileStore.CreateFile(out handle, out fileStatus, Arrays.RentFrom<char>(path), desiredAccess, 0, shareAccess, createDisposition, createOptions, session.SecurityContext);
             if (header.Status != NTStatus.STATUS_SUCCESS)
             {
                 state.LogToServer(Severity.Verbose, "OpenAndX: Opening '{0}{1}' failed. NTStatus: {2}.", share.Name, path, header.Status);
-                return new ErrorResponse(request.CommandName);
+                return ObjectsPool<ErrorResponse>.Get().Init(request.CommandName);
             }
 
-            FileAccess fileAccess = ToFileAccess(request.AccessMode.AccessMode);
-            ushort? fileID = session.AddOpenFile(header.TID, share.Name, path, handle, fileAccess);
+            var fileAccess = ToFileAccess(request.AccessMode.AccessMode);
+            var fileID = session.AddOpenFile(header.TID, share.Name, path, handle, fileAccess);
             if (!fileID.HasValue)
             {
                 share.FileStore.CloseFile(handle);
                 state.LogToServer(Severity.Verbose, "Create: Opening '{0}{1}' failed. Too many open files.", share.Name, path);
                 header.Status = NTStatus.STATUS_TOO_MANY_OPENED_FILES;
-                return new ErrorResponse(request.CommandName);
+                return ObjectsPool<ErrorResponse>.Get().Init(request.CommandName);
             }
 
             state.LogToServer(Severity.Verbose, "OpenAndX: Opened '{0}{1}'. (UID: {2}, TID: {3}, FID: {4})", share.Name, path, header.UID, header.TID, fileID.Value);
-            OpenResult openResult = ToOpenResult(fileStatus);
+            var openResult = ToOpenResult(fileStatus);
             if (share is NamedPipeShare)
             {
                 if (isExtended)
                 {
                     return CreateResponseExtendedForNamedPipe(fileID.Value, openResult);
                 }
-                else
-                {
-                    return CreateResponseForNamedPipe(fileID.Value, openResult);
-                }
+
+                return CreateResponseForNamedPipe(fileID.Value, openResult);
             }
-            else // FileSystemShare
+
+            var fileInfo = NTFileStoreHelper.GetNetworkOpenInformation(share.FileStore, handle);
+            if (isExtended)
             {
-                FileNetworkOpenInformation fileInfo = NTFileStoreHelper.GetNetworkOpenInformation(share.FileStore, handle);
-                if (isExtended)
-                {
-                    return CreateResponseExtendedFromFileInfo(fileInfo, fileID.Value, openResult);
-                }
-                else
-                {
-                    return CreateResponseFromFileInfo(fileInfo, fileID.Value, openResult);
-                }
+                return CreateResponseExtendedFromFileInfo(fileInfo, fileID.Value, openResult);
             }
+
+            return CreateResponseFromFileInfo(fileInfo, fileID.Value, openResult);
         }
 
         private static AccessMask ToAccessMask(AccessMode accessMode)
@@ -106,22 +99,23 @@ namespace SMBLibrary.Server.SMB1
             {
                 return AccessMask.GENERIC_READ;
             }
-            else if (accessMode == AccessMode.Write)
+
+            if (accessMode == AccessMode.Write)
             {
                 return AccessMask.GENERIC_WRITE | (AccessMask)FileAccessMask.FILE_READ_ATTRIBUTES;
             }
-            else if (accessMode == AccessMode.ReadWrite)
+
+            if (accessMode == AccessMode.ReadWrite)
             {
                 return AccessMask.GENERIC_READ | AccessMask.GENERIC_WRITE;
             }
-            else if (accessMode == AccessMode.Execute)
+
+            if (accessMode == AccessMode.Execute)
             {
                 return AccessMask.GENERIC_READ | AccessMask.GENERIC_EXECUTE;
             }
-            else
-            {
-                throw new ArgumentException("Invalid AccessMode value");
-            }
+
+            throw new ArgumentException("Invalid AccessMode value");
         }
 
         private static FileAccess ToFileAccess(AccessMode accessMode)
@@ -130,14 +124,13 @@ namespace SMBLibrary.Server.SMB1
             {
                 return FileAccess.Write;
             }
-            else if (accessMode == AccessMode.ReadWrite)
+
+            if (accessMode == AccessMode.ReadWrite)
             {
                 return FileAccess.ReadWrite;
             }
-            else
-            {
-                return FileAccess.Read;
-            }
+
+            return FileAccess.Read;
         }
 
         private static ShareAccess ToShareAccess(SharingMode sharingMode)
@@ -146,30 +139,33 @@ namespace SMBLibrary.Server.SMB1
             {
                 return ShareAccess.Read;
             }
-            else if (sharingMode == SharingMode.DenyReadWriteExecute)
+
+            if (sharingMode == SharingMode.DenyReadWriteExecute)
             {
                 return 0;
             }
-            else if (sharingMode == SharingMode.DenyWrite)
+
+            if (sharingMode == SharingMode.DenyWrite)
             {
                 return ShareAccess.Read;
             }
-            else if (sharingMode == SharingMode.DenyReadExecute)
+
+            if (sharingMode == SharingMode.DenyReadExecute)
             {
                 return ShareAccess.Write;
             }
-            else if (sharingMode == SharingMode.DenyNothing)
+
+            if (sharingMode == SharingMode.DenyNothing)
             {
                 return ShareAccess.Read | ShareAccess.Write;
             }
-            else if (sharingMode == (SharingMode)0xFF)
+
+            if (sharingMode == (SharingMode)0xFF)
             {
                 return 0;
             }
-            else
-            {
-                throw new ArgumentException("Invalid SharingMode value");
-            }
+
+            throw new ArgumentException("Invalid SharingMode value");
         }
 
         private static CreateDisposition ToCreateDisposition(OpenMode openMode)
@@ -180,11 +176,13 @@ namespace SMBLibrary.Server.SMB1
                 {
                     throw new ArgumentException("Invalid OpenMode combination");
                 }
-                else if (openMode.FileExistsOpts == FileExistsOpts.Append)
+
+                if (openMode.FileExistsOpts == FileExistsOpts.Append)
                 {
                     return CreateDisposition.FILE_OPEN;
                 }
-                else if (openMode.FileExistsOpts == FileExistsOpts.TruncateToZero)
+
+                if (openMode.FileExistsOpts == FileExistsOpts.TruncateToZero)
                 {
                     return CreateDisposition.FILE_OVERWRITE;
                 }
@@ -195,11 +193,13 @@ namespace SMBLibrary.Server.SMB1
                 {
                     return CreateDisposition.FILE_CREATE;
                 }
-                else if (openMode.FileExistsOpts == FileExistsOpts.Append)
+
+                if (openMode.FileExistsOpts == FileExistsOpts.Append)
                 {
                     return CreateDisposition.FILE_OPEN_IF;
                 }
-                else if (openMode.FileExistsOpts == FileExistsOpts.TruncateToZero)
+
+                if (openMode.FileExistsOpts == FileExistsOpts.TruncateToZero)
                 {
                     return CreateDisposition.FILE_OVERWRITE_IF;
                 }
@@ -210,7 +210,7 @@ namespace SMBLibrary.Server.SMB1
 
         private static CreateOptions ToCreateOptions(AccessModeOptions accessModeOptions)
         {
-            CreateOptions result = CreateOptions.FILE_NON_DIRECTORY_FILE | CreateOptions.FILE_COMPLETE_IF_OPLOCKED;
+            var result = CreateOptions.FILE_NON_DIRECTORY_FILE | CreateOptions.FILE_COMPLETE_IF_OPLOCKED;
             if (accessModeOptions.ReferenceLocality == ReferenceLocality.Sequential)
             {
                 result |= CreateOptions.FILE_SEQUENTIAL_ONLY;
@@ -243,19 +243,18 @@ namespace SMBLibrary.Server.SMB1
             {
                 return OpenResult.FileExistedAndWasTruncated;
             }
-            else if (fileStatus == FileStatus.FILE_CREATED)
+
+            if (fileStatus == FileStatus.FILE_CREATED)
             {
                 return OpenResult.NotExistedAndWasCreated;
             }
-            else
-            {
-                return OpenResult.FileExistedAndWasOpened;
-            }
+
+            return OpenResult.FileExistedAndWasOpened;
         }
 
         private static OpenAndXResponse CreateResponseForNamedPipe(ushort fileID, OpenResult openResult)
         {
-            OpenAndXResponse response = new OpenAndXResponse();
+            var response = new OpenAndXResponse();
             response.FID = fileID;
             response.AccessRights = AccessRights.SMB_DA_ACCESS_READ_WRITE;
             response.ResourceType = ResourceType.FileTypeMessageModePipe;
@@ -268,7 +267,7 @@ namespace SMBLibrary.Server.SMB1
 
         private static OpenAndXResponseExtended CreateResponseExtendedForNamedPipe(ushort fileID, OpenResult openResult)
         {
-            OpenAndXResponseExtended response = new OpenAndXResponseExtended();
+            var response = new OpenAndXResponseExtended();
             response.FID = fileID;
             response.AccessRights = AccessRights.SMB_DA_ACCESS_READ_WRITE;
             response.ResourceType = ResourceType.FileTypeMessageModePipe;
@@ -281,7 +280,7 @@ namespace SMBLibrary.Server.SMB1
 
         private static OpenAndXResponse CreateResponseFromFileInfo(FileNetworkOpenInformation fileInfo, ushort fileID, OpenResult openResult)
         {
-            OpenAndXResponse response = new OpenAndXResponse();
+            var response = new OpenAndXResponse();
             response.FID = fileID;
             response.FileAttrs = SMB1FileStoreHelper.GetFileAttributes(fileInfo.FileAttributes);
             response.LastWriteTime = fileInfo.LastWriteTime;
@@ -294,7 +293,7 @@ namespace SMBLibrary.Server.SMB1
 
         private static OpenAndXResponseExtended CreateResponseExtendedFromFileInfo(FileNetworkOpenInformation fileInfo, ushort fileID, OpenResult openResult)
         {
-            OpenAndXResponseExtended response = new OpenAndXResponseExtended();
+            var response = new OpenAndXResponseExtended();
             response.FID = fileID;
             response.FileAttrs = SMB1FileStoreHelper.GetFileAttributes(fileInfo.FileAttributes);
             response.LastWriteTime = fileInfo.LastWriteTime;

@@ -4,11 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using System.Text;
+
+using System.Buffers;
 using SMBLibrary.RPC;
-using Utilities;
 
 namespace SMBLibrary.Services
 {
@@ -26,18 +24,18 @@ namespace SMBLibrary.Services
         {
         }
 
-        public NetrShareEnumRequest(byte[] buffer)
+        public NetrShareEnumRequest(IMemoryOwner<byte> buffer)
         {
-            NDRParser parser = new NDRParser(buffer);
+            var parser = new NDRParser(buffer);
             ServerName = parser.ReadTopLevelUnicodeStringPointer();
             InfoStruct = new ShareEnum(parser);
             PreferedMaximumLength = parser.ReadUInt32();
             ResumeHandle = parser.ReadUInt32();
         }
 
-        public byte[] GetBytes()
+        public IMemoryOwner<byte> GetBytes()
         {
-            NDRWriter writer = new NDRWriter();
+            var writer = new NDRWriter();
             writer.WriteTopLevelUnicodeStringPointer(ServerName);
             writer.WriteStructure(InfoStruct);
             writer.WriteUInt32(PreferedMaximumLength);

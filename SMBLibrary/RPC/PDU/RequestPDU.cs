@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.RPC
@@ -22,16 +23,16 @@ namespace SMBLibrary.RPC
         public ushort ContextID;
         public ushort OpNum;
         public Guid ObjectGuid; // Optional field
-        public byte[] Data;
-        public byte[] AuthVerifier;
+        public IMemoryOwner<byte> Data;
+        public IMemoryOwner<byte> AuthVerifier;
 
-        public RequestPDU() : base()
+        public RequestPDU()
         {
             PacketType = PacketTypeName.Request;
-            AuthVerifier = new byte[0];
+            AuthVerifier = MemoryOwner<byte>.Empty;
         }
 
-        public RequestPDU(byte[] buffer, int offset) : base(buffer, offset)
+        public RequestPDU(Span<byte> buffer, int offset) : base(buffer, offset)
         {
             offset += CommonFieldsLength;
             AllocationHint = LittleEndianReader.ReadUInt32(buffer, ref offset);
@@ -41,26 +42,26 @@ namespace SMBLibrary.RPC
             {
                 ObjectGuid = LittleEndianReader.ReadGuid(buffer, ref offset);
             }
-            int dataLength = FragmentLength - AuthLength - offset;
-            Data = ByteReader.ReadBytes(buffer, ref offset, dataLength);
-            AuthVerifier = ByteReader.ReadBytes(buffer, offset, AuthLength);
+            var dataLength = FragmentLength - AuthLength - offset;
+            Data = Arrays.RentFrom<byte>(buffer.Slice(offset, dataLength)); offset += dataLength;
+            AuthVerifier = Arrays.RentFrom<byte>(buffer.Slice(offset, AuthLength));
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            AuthLength = (ushort)AuthVerifier.Length;
-            byte[] buffer = new byte[Length];
-            WriteCommonFieldsBytes(buffer);
-            int offset = CommonFieldsLength;
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, AllocationHint);
-            LittleEndianWriter.WriteUInt16(buffer, ref offset, ContextID);
-            LittleEndianWriter.WriteUInt16(buffer, ref offset, OpNum);
+            AuthLength = (ushort)AuthVerifier.Length();
+            var buffer = Arrays.Rent<byte>(Length);
+            WriteCommonFieldsBytes(buffer.Memory.Span);
+            var offset = CommonFieldsLength;
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, AllocationHint);
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, ref offset, ContextID);
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, ref offset, OpNum);
             if ((Flags & PacketFlags.ObjectUUID) > 0)
             {
-                LittleEndianWriter.WriteGuidBytes(buffer, ref offset, ObjectGuid);
+                LittleEndianWriter.WriteGuidBytes(buffer.Memory.Span, ref offset, ObjectGuid);
             }
-            ByteWriter.WriteBytes(buffer, ref offset, Data);
-            ByteWriter.WriteBytes(buffer, ref offset, AuthVerifier);
+            BufferWriter.WriteBytes(buffer.Memory.Span, ref offset, Data.Memory.Span);
+            BufferWriter.WriteBytes(buffer.Memory.Span, ref offset, AuthVerifier.Memory.Span);
             return buffer;
         }
 
@@ -68,7 +69,7 @@ namespace SMBLibrary.RPC
         {
             get
             {
-                int length = CommonFieldsLength + RequestFieldsFixedLength + Data.Length + AuthVerifier.Length;
+                var length = CommonFieldsLength + RequestFieldsFixedLength + Data.Length() + AuthVerifier.Length();
                 if ((Flags & PacketFlags.ObjectUUID) > 0)
                 {
                     length += 16;

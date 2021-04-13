@@ -4,38 +4,34 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using Utilities;
+
+using System.Buffers;
+using MemoryPools.Memory;
 
 namespace SMBLibrary.NetBios
 {
     /// <summary>
     /// [RFC 1002] 4.3.3. POSITIVE SESSION RESPONSE PACKET
     /// </summary>
-    public class PositiveSessionResponsePacket : SessionPacket
+    public class PositiveSessionResponsePacket : SessionPacket<PositiveSessionResponsePacket>
     {
-        public PositiveSessionResponsePacket() : base()
+        public PositiveSessionResponsePacket()
         {
-            this.Type = SessionPacketTypeName.PositiveSessionResponse;
+            Type = SessionPacketTypeName.PositiveSessionResponse;
         }
 
-        public PositiveSessionResponsePacket(byte[] buffer, int offset) : base(buffer, offset)
+        public override IMemoryOwner<byte> GetBytes()
         {
-        }
-
-        public override byte[] GetBytes()
-        {
-            this.Trailer = new byte[0];
+            Trailer = MemoryOwner<byte>.Empty;
             return base.GetBytes();
         }
 
-        public override int Length
+        public override int Length => HeaderLength;
+
+        public override void Dispose()
         {
-            get
-            {
-                return HeaderLength;
-            }
+            base.Dispose();
+            ObjectsPool<PositiveSessionResponsePacket>.Return(this);
         }
     }
 }

@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -25,36 +26,36 @@ namespace SMBLibrary.SMB1
         public uint FileSize;
         public byte[] Reserved; // 10 bytes
 
-        public QueryInformationResponse() : base()
+        public override SMB1Command Init()
         {
+            FileAttributes = default;
+            LastWriteTime = default;
+            FileSize = default;
             Reserved = new byte[10];
+            return this;
         }
 
-        public QueryInformationResponse(byte[] buffer, int offset) : base(buffer, offset, false)
+        public QueryInformationResponse Init(Span<byte> buffer, int offset)
         {
-            FileAttributes = (SMBFileAttributes)LittleEndianConverter.ToUInt16(this.SMBParameters, 0);
-            LastWriteTime = UTimeHelper.ReadNullableUTime(this.SMBParameters, 2);
-            FileSize = LittleEndianConverter.ToUInt32(this.SMBParameters, 6);
-            Reserved = ByteReader.ReadBytes(this.SMBParameters, 10, 10);
+            base.Init(buffer, offset, false);
+            FileAttributes = (SMBFileAttributes)LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 0);
+            LastWriteTime = UTimeHelper.ReadNullableUTime(SmbParameters.Memory.Span, 2);
+            FileSize = LittleEndianConverter.ToUInt32(SmbParameters.Memory.Span, 6);
+            Reserved = ByteReader.ReadBytes_RentArray(SmbParameters.Memory.Span, 10, 10);
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            this.SMBParameters = new byte[ParameterLength];
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 0, (ushort)FileAttributes);
-            UTimeHelper.WriteUTime(this.SMBParameters, 2, LastWriteTime);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, 6, FileSize);
-            ByteWriter.WriteBytes(this.SMBParameters, 10, Reserved, 10);
+            SmbParameters = Arrays.Rent(ParameterLength);;
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 0, (ushort)FileAttributes);
+            UTimeHelper.WriteUTime(SmbParameters.Memory.Span, 2, LastWriteTime);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, 6, FileSize);
+            BufferWriter.WriteBytes(SmbParameters.Memory.Span, 10, Reserved, 10);
             
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_QUERY_INFORMATION;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_QUERY_INFORMATION;
     }
 }

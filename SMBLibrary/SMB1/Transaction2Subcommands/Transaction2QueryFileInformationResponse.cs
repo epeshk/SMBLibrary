@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
+
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -19,31 +20,33 @@ namespace SMBLibrary.SMB1
         // Parameters:
         public ushort EaErrorOffset; // Meaningful only when request's InformationLevel is SMB_INFO_QUERY_EAS_FROM_LIST
         // Data:
-        public byte[] InformationBytes = new byte[0];
+        public IMemoryOwner<byte> InformationBytes = MemoryOwner<byte>.Empty;
 
-        public Transaction2QueryFileInformationResponse() : base()
+        public Transaction2QueryFileInformationResponse()
         {
         }
 
-        public Transaction2QueryFileInformationResponse(byte[] parameters, byte[] data, bool isUnicode) : base()
+        public Transaction2QueryFileInformationResponse(IMemoryOwner<byte> parameters, IMemoryOwner<byte> data, bool isUnicode)
         {
-            EaErrorOffset = LittleEndianConverter.ToUInt16(parameters, 0);
-            InformationBytes = data;
+            EaErrorOffset = LittleEndianConverter.ToUInt16(parameters.Memory.Span, 0);
+            InformationBytes = data.AddOwner();
         }
 
-        public override byte[] GetParameters(bool isUnicode)
+        public override IMemoryOwner<byte> GetParameters(bool isUnicode)
         {
-            return LittleEndianConverter.GetBytes(EaErrorOffset);
+            var buf = Arrays.Rent(2);
+            LittleEndianConverter.GetBytes(buf.Memory.Span, EaErrorOffset);
+            return buf;
         }
 
-        public override byte[] GetData(bool isUnicode)
+        public override IMemoryOwner<byte> GetData(bool isUnicode)
         {
             return InformationBytes;
         }
 
         public QueryInformation GetQueryInformation(QueryInformationLevel queryInformationLevel)
         {
-            return QueryInformation.GetQueryInformation(InformationBytes, queryInformationLevel);
+            return QueryInformation.GetQueryInformation(InformationBytes.Memory.Span, queryInformationLevel);
         }
 
         public void SetQueryInformation(QueryInformation queryInformation)
@@ -56,7 +59,7 @@ namespace SMBLibrary.SMB1
         /// </remarks>
         public FileInformation GetFileInformation(FileInformationClass informationClass)
         {
-            return FileInformation.GetFileInformation(InformationBytes, 0, informationClass);
+            return FileInformation.GetFileInformation(InformationBytes.Memory.Span, 0, informationClass);
         }
 
         /// <remarks>
@@ -67,12 +70,6 @@ namespace SMBLibrary.SMB1
             InformationBytes = information.GetBytes();
         }
 
-        public override Transaction2SubcommandName SubcommandName
-        {
-            get
-            {
-                return Transaction2SubcommandName.TRANS2_QUERY_FILE_INFORMATION;
-            }
-        }
+        public override Transaction2SubcommandName SubcommandName => Transaction2SubcommandName.TRANS2_QUERY_FILE_INFORMATION;
     }
 }

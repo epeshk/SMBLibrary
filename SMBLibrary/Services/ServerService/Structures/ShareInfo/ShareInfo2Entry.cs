@@ -4,11 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 using SMBLibrary.RPC;
-using Utilities;
 
 namespace SMBLibrary.Services
 {
@@ -76,12 +74,6 @@ namespace SMBLibrary.Services
             writer.EndStructure();
         }
 
-        public uint Level
-        {
-            get
-            {
-                return 2;
-            }
-        }
+        public uint Level => 2;
     }
 }

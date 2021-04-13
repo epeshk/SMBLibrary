@@ -4,8 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using Utilities;
 
 namespace SMBLibrary
@@ -28,17 +28,17 @@ namespace SMBLibrary
         {
         }
 
-        public FileBasicInformation(byte[] buffer, int offset)
+        public FileBasicInformation(Span<byte> buffer, int offset)
         {
             CreationTime = FileTimeHelper.ReadSetFileTime(buffer, offset + 0);
             LastAccessTime = FileTimeHelper.ReadSetFileTime(buffer, offset + 8);
             LastWriteTime = FileTimeHelper.ReadSetFileTime(buffer, offset + 16);
             ChangeTime = FileTimeHelper.ReadSetFileTime(buffer, offset + 24);
-            FileAttributes = (FileAttributes)LittleEndianConverter.ToUInt32(buffer, offset + 32);
+            FileAttributes = LittleEndianConverter.ToUInt32(buffer, offset + 32);
             Reserved = LittleEndianConverter.ToUInt32(buffer, offset + 36);
         }
 
-        public override void WriteBytes(byte[] buffer, int offset)
+        public override void WriteBytes(Span<byte> buffer, int offset)
         {
             FileTimeHelper.WriteSetFileTime(buffer, offset + 0, CreationTime);
             FileTimeHelper.WriteSetFileTime(buffer, offset + 8, LastAccessTime);
@@ -48,20 +48,8 @@ namespace SMBLibrary
             LittleEndianWriter.WriteUInt32(buffer, offset + 36, Reserved);
         }
 
-        public override FileInformationClass FileInformationClass
-        {
-            get
-            {
-                return FileInformationClass.FileBasicInformation;
-            }
-        }
+        public override FileInformationClass FileInformationClass => FileInformationClass.FileBasicInformation;
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength;
-            }
-        }
+        public override int Length => FixedLength;
     }
 }

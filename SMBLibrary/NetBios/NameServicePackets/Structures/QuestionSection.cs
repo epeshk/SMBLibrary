@@ -4,8 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using System.IO;
 using Utilities;
 
@@ -25,7 +25,7 @@ namespace SMBLibrary.NetBios
             Class = QuestionClass.In;
         }
 
-        public QuestionSection(byte[] buffer, ref int offset)
+        public QuestionSection(Span<byte> buffer, ref int offset)
         {
             Name = NetBiosUtils.DecodeName(buffer, ref offset);
             Type = (NameRecordType)BigEndianReader.ReadUInt16(buffer, ref offset);
@@ -34,8 +34,8 @@ namespace SMBLibrary.NetBios
 
         public void WriteBytes(Stream stream)
         {
-            byte[] encodedName = NetBiosUtils.EncodeName(Name, String.Empty);
-            ByteWriter.WriteBytes(stream, encodedName);
+            var encodedName = NetBiosUtils.EncodeName(Name, String.Empty);
+            BufferWriter.WriteBytes(stream, encodedName);
             BigEndianWriter.WriteUInt16(stream, (ushort)Type);
             BigEndianWriter.WriteUInt16(stream, (ushort)Class);
         }

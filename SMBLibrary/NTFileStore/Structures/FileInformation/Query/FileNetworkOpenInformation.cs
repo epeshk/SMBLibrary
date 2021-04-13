@@ -4,8 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using Utilities;
 
 namespace SMBLibrary
@@ -30,7 +30,7 @@ namespace SMBLibrary
         {
         }
 
-        public FileNetworkOpenInformation(byte[] buffer, int offset)
+        public FileNetworkOpenInformation(Span<byte> buffer, int offset)
         {
             CreationTime = FileTimeHelper.ReadNullableFileTime(buffer, offset + 0);
             LastAccessTime = FileTimeHelper.ReadNullableFileTime(buffer, offset + 8);
@@ -38,11 +38,11 @@ namespace SMBLibrary
             ChangeTime = FileTimeHelper.ReadNullableFileTime(buffer, offset + 24);
             AllocationSize = LittleEndianConverter.ToInt64(buffer, offset + 32);
             EndOfFile = LittleEndianConverter.ToInt64(buffer, offset + 40);
-            FileAttributes = (FileAttributes)LittleEndianConverter.ToUInt32(buffer, offset + 48);
+            FileAttributes = LittleEndianConverter.ToUInt32(buffer, offset + 48);
             Reserved = LittleEndianConverter.ToUInt32(buffer, offset + 52);
         }
 
-        public override void WriteBytes(byte[] buffer, int offset)
+        public override void WriteBytes(Span<byte> buffer, int offset)
         {
             FileTimeHelper.WriteFileTime(buffer, offset + 0, CreationTime);
             FileTimeHelper.WriteFileTime(buffer, offset + 8, LastAccessTime);
@@ -56,37 +56,22 @@ namespace SMBLibrary
 
         public bool IsDirectory
         {
-            get
-            {
-                return ((FileAttributes & FileAttributes.Directory) > 0);
-            }
+            get => ((FileAttributes.Value & FileAttributes.Directory) > 0);
             set
             {
                 if (value)
                 {
-                    FileAttributes |= FileAttributes.Directory;
+                    FileAttributes.Value |= FileAttributes.Directory;
                 }
                 else
                 {
-                    FileAttributes &= ~FileAttributes.Directory;
+                    FileAttributes.Value &= ~FileAttributes.Directory;
                 }
             }
         }
 
-        public override FileInformationClass FileInformationClass
-        {
-            get
-            {
-                return FileInformationClass.FileNetworkOpenInformation;
-            }
-        }
+        public override FileInformationClass FileInformationClass => FileInformationClass.FileNetworkOpenInformation;
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength;
-            }
-        }
+        public override int Length => FixedLength;
     }
 }

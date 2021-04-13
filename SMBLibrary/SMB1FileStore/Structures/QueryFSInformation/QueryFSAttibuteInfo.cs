@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -21,45 +22,35 @@ namespace SMBLibrary.SMB1
         public FileSystemAttributes FileSystemAttributes;
         public uint MaxFileNameLengthInBytes;
         //uint LengthOfFileSystemName; // In bytes
-        public string FileSystemName; // Unicode
+        public IMemoryOwner<char> FileSystemName; // Unicode
 
         public QueryFSAttibuteInfo()
         {
         }
 
-        public QueryFSAttibuteInfo(byte[] buffer, int offset)
+        public QueryFSAttibuteInfo(Span<byte> buffer, int offset)
         {
             FileSystemAttributes = (FileSystemAttributes)LittleEndianConverter.ToUInt32(buffer, offset + 0);
             MaxFileNameLengthInBytes = LittleEndianConverter.ToUInt32(buffer, offset + 4);
-            uint lengthOfFileSystemName = LittleEndianConverter.ToUInt32(buffer, offset + 8);
-            FileSystemName = ByteReader.ReadUTF16String(buffer, offset + 12, (int)(lengthOfFileSystemName / 2));
+            var lengthOfFileSystemName = LittleEndianConverter.ToUInt32(buffer, offset + 8);
+            FileSystemName = Arrays.Rent<char>((int) (lengthOfFileSystemName / 2)); 
+            
+            ByteReader.ReadUTF16String(FileSystemName.Memory.Span, buffer, offset + 12, (int)(lengthOfFileSystemName / 2));
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            uint lengthOfFileSystemName = (uint)(FileSystemName.Length * 2);
-            byte[] buffer = new byte[this.Length];
-            LittleEndianWriter.WriteUInt32(buffer, 0, (uint)FileSystemAttributes);
-            LittleEndianWriter.WriteUInt32(buffer, 4, MaxFileNameLengthInBytes);
-            LittleEndianWriter.WriteUInt32(buffer, 8, lengthOfFileSystemName);
-            ByteWriter.WriteUTF16String(buffer, 12, FileSystemName);
+            var lengthOfFileSystemName = (uint)(FileSystemName.Memory.Length * 2);
+            var buffer = Arrays.Rent(Length);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, 0, (uint)FileSystemAttributes);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, 4, MaxFileNameLengthInBytes);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, 8, lengthOfFileSystemName);
+            BufferWriter.WriteUTF16String(buffer.Memory.Span, 12, FileSystemName.Memory.Span);
             return buffer;
         }
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength + FileSystemName.Length * 2;
-            }
-        }
+        public override int Length => FixedLength + FileSystemName.Memory.Length * 2;
 
-        public override QueryFSInformationLevel InformationLevel
-        {
-            get
-            {
-                return QueryFSInformationLevel.SMB_QUERY_FS_ATTRIBUTE_INFO;
-            }
-        }
+        public override QueryFSInformationLevel InformationLevel => QueryFSInformationLevel.SMB_QUERY_FS_ATTRIBUTE_INFO;
     }
 }

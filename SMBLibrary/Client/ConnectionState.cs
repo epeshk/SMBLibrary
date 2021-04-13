@@ -4,41 +4,32 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Net;
-using System.Net.Sockets;
+using MemoryPools.Memory;
 using SMBLibrary.NetBios;
-using SMBLibrary.SMB1;
-using Utilities;
 
 namespace SMBLibrary.Client
 {
-    public class ConnectionState
+    public class ConnectionState : IDisposable
     {
-        private Socket m_clientSocket;
-        private NBTConnectionReceiveBuffer m_receiveBuffer;
+        private ConnectionReceiveBuffer m_receiveBuffer;
 
-        public ConnectionState(Socket clientSocket)
+        public ConnectionState()
         {
-            m_clientSocket = clientSocket;
-            m_receiveBuffer = new NBTConnectionReceiveBuffer();
+            m_receiveBuffer = ObjectsPool<ConnectionReceiveBuffer>.Get().Init();
         }
 
-        public Socket ClientSocket
-        {
-            get
-            {
-                return m_clientSocket;
-            }
-        }
+        public ConnectionReceiveBuffer ReceiveBuffer => m_receiveBuffer;
 
-        public NBTConnectionReceiveBuffer ReceiveBuffer
+        public void Dispose()
         {
-            get
+            if (m_receiveBuffer != null)
             {
-                return m_receiveBuffer;
+                m_receiveBuffer.Dispose();
+                ObjectsPool<ConnectionReceiveBuffer>.Return(m_receiveBuffer);
             }
+            m_receiveBuffer = null;
         }
     }
 }

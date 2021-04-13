@@ -4,9 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.RPC
@@ -26,44 +26,38 @@ namespace SMBLibrary.RPC
         {
         }
 
-        public ContextElement(byte[] buffer, int offset)
+        public ContextElement(Span<byte> buffer, int offset)
         {
             ContextID = LittleEndianConverter.ToUInt16(buffer, offset + 0);
-            byte numberOfTransferSyntaxItems = ByteReader.ReadByte(buffer, offset + 2);
+            var numberOfTransferSyntaxItems = ByteReader.ReadByte(buffer, offset + 2);
             Reserved = ByteReader.ReadByte(buffer, offset + 3);
             AbstractSyntax = new SyntaxID(buffer, offset + 4);
             offset += 4 + SyntaxID.Length;
-            for (int index = 0; index < numberOfTransferSyntaxItems; index++)
+            for (var index = 0; index < numberOfTransferSyntaxItems; index++)
             {
-                SyntaxID syntax = new SyntaxID(buffer, offset);
+                var syntax = new SyntaxID(buffer, offset);
                 TransferSyntaxList.Add(syntax);
                 offset += SyntaxID.Length;
             }
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
-            byte numberOfTransferSyntaxItems = (byte)TransferSyntaxList.Count;
+            var numberOfTransferSyntaxItems = (byte)TransferSyntaxList.Count;
 
             LittleEndianWriter.WriteUInt16(buffer, offset + 0, ContextID);
-            ByteWriter.WriteByte(buffer, offset + 2, numberOfTransferSyntaxItems);
-            ByteWriter.WriteByte(buffer, offset + 3, Reserved);
+            BufferWriter.WriteByte(buffer, offset + 2, numberOfTransferSyntaxItems);
+            BufferWriter.WriteByte(buffer, offset + 3, Reserved);
             AbstractSyntax.WriteBytes(buffer, offset + 4);
             offset += 4 + SyntaxID.Length;
 
-            for (int index = 0; index < numberOfTransferSyntaxItems; index++)
+            for (var index = 0; index < numberOfTransferSyntaxItems; index++)
             {
                 TransferSyntaxList[index].WriteBytes(buffer, offset);
                 offset += SyntaxID.Length;
             }
         }
 
-        public int Length
-        {
-            get
-            {
-                return 4 + SyntaxID.Length * (TransferSyntaxList.Count + 1);
-            }
-        }
+        public int Length => 4 + SyntaxID.Length * (TransferSyntaxList.Count + 1);
     }
 }

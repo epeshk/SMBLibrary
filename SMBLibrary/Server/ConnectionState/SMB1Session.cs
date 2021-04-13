@@ -4,10 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Utilities;
+using SMBLibrary.Client;
 
 namespace SMBLibrary.Server
 {
@@ -44,7 +45,7 @@ namespace SMBLibrary.Server
         {
             lock (m_connection)
             {
-                ushort? treeID = m_connection.AllocateTreeID();
+                var treeID = m_connection.AllocateTreeID();
                 if (treeID.HasValue)
                 {
                     m_connectedTrees.Add(treeID.Value, share);
@@ -68,10 +69,10 @@ namespace SMBLibrary.Server
             {
                 lock (m_connection)
                 {
-                    List<ushort> fileIDList = new List<ushort>(m_openFiles.Keys);
-                    foreach (ushort fileID in fileIDList)
+                    var fileIDList = new List<ushort>(m_openFiles.Keys);
+                    foreach (var fileID in fileIDList)
                     {
-                        OpenFileObject openFile = m_openFiles[fileID];
+                        var openFile = m_openFiles[fileID];
                         if (openFile.TreeID == treeID)
                         {
                             share.FileStore.CloseFile(openFile.Handle);
@@ -94,7 +95,7 @@ namespace SMBLibrary.Server
         {
             lock (m_connection)
             {
-                ushort? fileID = m_connection.AllocateFileID();
+                var fileID = m_connection.AllocateFileID();
                 if (fileID.HasValue)
                 {
                     m_openFiles.Add(fileID.Value, new OpenFileObject(treeID, shareName, relativePath, handle, fileAccess));
@@ -120,10 +121,10 @@ namespace SMBLibrary.Server
 
         public List<OpenFileInformation> GetOpenFilesInformation()
         {
-            List<OpenFileInformation> result = new List<OpenFileInformation>();
+            var result = new List<OpenFileInformation>();
             lock (m_connection)
             {
-                foreach (OpenFileObject openFile in m_openFiles.Values)
+                foreach (var openFile in m_openFiles.Values)
                 {
                     result.Add(new OpenFileInformation(openFile.ShareName, openFile.Path, openFile.FileAccess, openFile.OpenedDT));
                 }
@@ -135,7 +136,7 @@ namespace SMBLibrary.Server
         {
             for (ushort offset = 0; offset < UInt16.MaxValue; offset++)
             {
-                ushort searchHandle = (ushort)(m_nextSearchHandle + offset);
+                var searchHandle = (ushort)(m_nextSearchHandle + offset);
                 if (searchHandle == 0 || searchHandle == 0xFFFF)
                 {
                     continue;
@@ -149,12 +150,12 @@ namespace SMBLibrary.Server
             return null;
         }
 
-        public ushort? AddOpenSearch(List<QueryDirectoryFileInformation> entries, int enumerationLocation)
+        public ushort? AddOpenSearch(List<FindFilesQueryResult> entries, int enumerationLocation)
         {
-            ushort? searchHandle = AllocateSearchHandle();
+            var searchHandle = AllocateSearchHandle();
             if (searchHandle.HasValue)
             {
-                OpenSearch openSearch = new OpenSearch(entries, enumerationLocation);
+                var openSearch = new OpenSearch(entries, enumerationLocation);
                 m_openSearches.Add(searchHandle.Value, openSearch);
             }
             return searchHandle;
@@ -177,51 +178,21 @@ namespace SMBLibrary.Server
         /// </summary>
         public void Close()
         {
-            List<ushort> treeIDList = new List<ushort>(m_connectedTrees.Keys);
-            foreach (ushort treeID in treeIDList)
+            var treeIDList = new List<ushort>(m_connectedTrees.Keys);
+            foreach (var treeID in treeIDList)
             {
                 DisconnectTree(treeID);
             }
         }
 
-        public ushort UserID
-        {
-            get
-            {
-                return m_userID;
-            }
-        }
+        public ushort UserID => m_userID;
 
-        public SecurityContext SecurityContext
-        {
-            get
-            {
-                return m_securityContext;
-            }
-        }
+        public SecurityContext SecurityContext => m_securityContext;
 
-        public string UserName
-        {
-            get
-            {
-                return m_securityContext.UserName;
-            }
-        }
+        public string UserName => m_securityContext.UserName;
 
-        public string MachineName
-        {
-            get
-            {
-                return m_securityContext.MachineName;
-            }
-        }
+        public string MachineName => m_securityContext.MachineName;
 
-        public DateTime CreationDT
-        {
-            get
-            {
-                return m_creationDT;
-            }
-        }
+        public DateTime CreationDT => m_creationDT;
     }
 }

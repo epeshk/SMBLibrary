@@ -4,10 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using SMBLibrary.SMB1;
-using Utilities;
 
 namespace SMBLibrary.SMB1
 {
@@ -43,48 +41,52 @@ namespace SMBLibrary.SMB1
         {
             if (fileInformation is FileBasicInformation)
             {
-                FileBasicInformation fileBasicInfo = (FileBasicInformation)fileInformation;
-                QueryFileBasicInfo result = new QueryFileBasicInfo();
+                var fileBasicInfo = (FileBasicInformation)fileInformation;
+                var result = new QueryFileBasicInfo();
                 result.CreationTime = fileBasicInfo.CreationTime;
                 result.LastAccessTime = fileBasicInfo.LastAccessTime;
                 result.LastWriteTime = fileBasicInfo.LastWriteTime;
                 result.LastChangeTime = fileBasicInfo.ChangeTime;
-                result.ExtFileAttributes = (ExtendedFileAttributes)fileBasicInfo.FileAttributes;
+                result.ExtFileAttributes = fileBasicInfo.FileAttributes;
                 return result;
             }
-            else if (fileInformation is FileStandardInformation)
+
+            if (fileInformation is FileStandardInformation)
             {
-                FileStandardInformation fileStandardInfo = (FileStandardInformation)fileInformation;
-                QueryFileStandardInfo result = new QueryFileStandardInfo();
+                var fileStandardInfo = (FileStandardInformation)fileInformation;
+                var result = new QueryFileStandardInfo();
                 result.AllocationSize = fileStandardInfo.AllocationSize;
                 result.EndOfFile = fileStandardInfo.EndOfFile;
                 result.DeletePending = fileStandardInfo.DeletePending;
                 result.Directory = fileStandardInfo.Directory;
                 return result;
             }
-            else if (fileInformation is FileEaInformation)
+
+            if (fileInformation is FileEaInformation)
             {
-                FileEaInformation fileEAInfo = (FileEaInformation)fileInformation;
-                QueryFileEaInfo result = new QueryFileEaInfo();
+                var fileEAInfo = (FileEaInformation)fileInformation;
+                var result = new QueryFileEaInfo();
                 result.EaSize = fileEAInfo.EaSize;
                 return result;
             }
-            else if (fileInformation is FileNameInformation)
+
+            if (fileInformation is FileNameInformation)
             {
-                FileNameInformation fileNameInfo = (FileNameInformation)fileInformation;
-                QueryFileNameInfo result = new QueryFileNameInfo();
+                var fileNameInfo = (FileNameInformation)fileInformation;
+                var result = new QueryFileNameInfo();
                 result.FileName = fileNameInfo.FileName;
                 return result;
             }
-            else if (fileInformation is FileAllInformation)
+
+            if (fileInformation is FileAllInformation)
             {
-                FileAllInformation fileAllInfo = (FileAllInformation)fileInformation;
-                QueryFileAllInfo result = new QueryFileAllInfo();
+                var fileAllInfo = (FileAllInformation)fileInformation;
+                var result = new QueryFileAllInfo();
                 result.CreationTime = fileAllInfo.BasicInformation.CreationTime;
                 result.LastAccessTime = fileAllInfo.BasicInformation.LastAccessTime;
                 result.LastWriteTime = fileAllInfo.BasicInformation.LastWriteTime;
                 result.LastChangeTime = fileAllInfo.BasicInformation.ChangeTime;
-                result.ExtFileAttributes = (ExtendedFileAttributes)fileAllInfo.BasicInformation.FileAttributes;
+                result.ExtFileAttributes = fileAllInfo.BasicInformation.FileAttributes;
                 result.AllocationSize = fileAllInfo.StandardInformation.AllocationSize;
                 result.EndOfFile = fileAllInfo.StandardInformation.EndOfFile;
                 result.DeletePending = fileAllInfo.StandardInformation.DeletePending;
@@ -93,24 +95,27 @@ namespace SMBLibrary.SMB1
                 result.FileName = fileAllInfo.NameInformation.FileName;
                 return result;
             }
-            else if (fileInformation is FileAlternateNameInformation)
+
+            if (fileInformation is FileAlternateNameInformation)
             {
-                FileAlternateNameInformation fileAltNameInfo = (FileAlternateNameInformation)fileInformation;
-                QueryFileAltNameInfo result = new QueryFileAltNameInfo();
+                var fileAltNameInfo = (FileAlternateNameInformation)fileInformation;
+                var result = new QueryFileAltNameInfo();
                 result.FileName = fileAltNameInfo.FileName;
                 return result;
             }
-            else if (fileInformation is FileStreamInformation)
+
+            if (fileInformation is FileStreamInformation)
             {
-                FileStreamInformation fileStreamInfo = (FileStreamInformation)fileInformation;
-                QueryFileStreamInfo result = new QueryFileStreamInfo();
+                var fileStreamInfo = (FileStreamInformation)fileInformation;
+                var result = new QueryFileStreamInfo();
                 result.Entries.AddRange(fileStreamInfo.Entries);
                 return result;
             }
-            else if (fileInformation is FileCompressionInformation)
+
+            if (fileInformation is FileCompressionInformation)
             {
-                FileCompressionInformation fileCompressionInfo = (FileCompressionInformation)fileInformation;
-                QueryFileCompressionInfo result = new QueryFileCompressionInfo();
+                var fileCompressionInfo = (FileCompressionInformation)fileInformation;
+                var result = new QueryFileCompressionInfo();
                 result.CompressedFileSize = fileCompressionInfo.CompressedFileSize;
                 result.CompressionFormat = fileCompressionInfo.CompressionFormat;
                 result.CompressionUnitShift = fileCompressionInfo.CompressionUnitShift;
@@ -119,10 +124,8 @@ namespace SMBLibrary.SMB1
                 result.Reserved = fileCompressionInfo.Reserved;
                 return result;
             }
-            else
-            {
-                throw new NotImplementedException();
-            }
+
+            throw new NotImplementedException();
         }
 
         /// <exception cref="SMBLibrary.UnsupportedInformationLevelException"></exception>
@@ -155,8 +158,8 @@ namespace SMBLibrary.SMB1
         {
             if (queryInformation is QueryFileBasicInfo)
             {
-                QueryFileBasicInfo queryFileBasicInfo = (QueryFileBasicInfo)queryInformation;
-                FileBasicInformation result = new FileBasicInformation();
+                var queryFileBasicInfo = (QueryFileBasicInfo)queryInformation;
+                var result = new FileBasicInformation();
                 result.CreationTime = queryFileBasicInfo.CreationTime;
                 result.LastAccessTime = queryFileBasicInfo.LastAccessTime;
                 result.LastWriteTime = queryFileBasicInfo.LastWriteTime;
@@ -164,34 +167,38 @@ namespace SMBLibrary.SMB1
                 result.FileAttributes = (FileAttributes)queryFileBasicInfo.ExtFileAttributes;
                 return result;
             }
-            else if (queryInformation is QueryFileStandardInfo)
+
+            if (queryInformation is QueryFileStandardInfo)
             {
-                QueryFileStandardInfo queryFileStandardInfo = (QueryFileStandardInfo)queryInformation;
-                FileStandardInformation result = new FileStandardInformation();
+                var queryFileStandardInfo = (QueryFileStandardInfo)queryInformation;
+                var result = new FileStandardInformation();
                 result.AllocationSize = queryFileStandardInfo.AllocationSize;
                 result.EndOfFile = queryFileStandardInfo.EndOfFile;
                 result.DeletePending = queryFileStandardInfo.DeletePending;
                 result.Directory = queryFileStandardInfo.Directory;
                 return result;
             }
-            else if (queryInformation is QueryFileEaInfo)
+
+            if (queryInformation is QueryFileEaInfo)
             {
-                QueryFileEaInfo queryFileEaInfo = (QueryFileEaInfo)queryInformation;
-                FileEaInformation result = new FileEaInformation();
+                var queryFileEaInfo = (QueryFileEaInfo)queryInformation;
+                var result = new FileEaInformation();
                 result.EaSize = queryFileEaInfo.EaSize;
                 return result;
             }
-            else if (queryInformation is QueryFileNameInfo)
+
+            if (queryInformation is QueryFileNameInfo)
             {
-                QueryFileNameInfo queryFileNameInfo = (QueryFileNameInfo)queryInformation;
-                FileNameInformation result = new FileNameInformation();
+                var queryFileNameInfo = (QueryFileNameInfo)queryInformation;
+                var result = new FileNameInformation();
                 result.FileName = queryFileNameInfo.FileName;
                 return result;
             }
-            else if (queryInformation is QueryFileAllInfo)
+
+            if (queryInformation is QueryFileAllInfo)
             {
-                QueryFileAllInfo queryFileAllInfo = (QueryFileAllInfo)queryInformation;
-                FileAllInformation result = new FileAllInformation();
+                var queryFileAllInfo = (QueryFileAllInfo)queryInformation;
+                var result = new FileAllInformation();
                 result.BasicInformation.CreationTime = queryFileAllInfo.CreationTime;
                 result.BasicInformation.LastAccessTime = queryFileAllInfo.LastAccessTime;
                 result.BasicInformation.LastWriteTime = queryFileAllInfo.LastWriteTime;
@@ -205,24 +212,27 @@ namespace SMBLibrary.SMB1
                 result.NameInformation.FileName = queryFileAllInfo.FileName;
                 return result;
             }
-            else if (queryInformation is QueryFileAltNameInfo)
+
+            if (queryInformation is QueryFileAltNameInfo)
             {
-                QueryFileAltNameInfo queryFileAltNameInfo = (QueryFileAltNameInfo)queryInformation;
-                FileAlternateNameInformation result = new FileAlternateNameInformation();
+                var queryFileAltNameInfo = (QueryFileAltNameInfo)queryInformation;
+                var result = new FileAlternateNameInformation();
                 result.FileName = queryFileAltNameInfo.FileName;
                 return result;
             }
-            else if (queryInformation is QueryFileStreamInfo)
+
+            if (queryInformation is QueryFileStreamInfo)
             {
-                QueryFileStreamInfo queryFileStreamInfo = (QueryFileStreamInfo)queryInformation;
-                FileStreamInformation result = new FileStreamInformation();
+                var queryFileStreamInfo = (QueryFileStreamInfo)queryInformation;
+                var result = new FileStreamInformation();
                 result.Entries.AddRange(queryFileStreamInfo.Entries);
                 return result;
             }
-            else if (queryInformation is QueryFileCompressionInfo)
+
+            if (queryInformation is QueryFileCompressionInfo)
             {
-                QueryFileCompressionInfo queryFileCompressionInfo = (QueryFileCompressionInfo)queryInformation;
-                FileCompressionInformation result = new FileCompressionInformation();
+                var queryFileCompressionInfo = (QueryFileCompressionInfo)queryInformation;
+                var result = new FileCompressionInformation();
                 result.CompressedFileSize = queryFileCompressionInfo.CompressedFileSize;
                 result.CompressionFormat = queryFileCompressionInfo.CompressionFormat;
                 result.CompressionUnitShift = queryFileCompressionInfo.CompressionUnitShift;
@@ -231,10 +241,8 @@ namespace SMBLibrary.SMB1
                 result.Reserved = queryFileCompressionInfo.Reserved;
                 return result;
             }
-            else
-            {
-                throw new NotImplementedException();
-            }
+
+            throw new NotImplementedException();
         }
     }
 }

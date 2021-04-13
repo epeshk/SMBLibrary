@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -35,54 +36,68 @@ namespace SMBLibrary.SMB1
         public NamedPipeStatus NMPipeStatus;
         public bool Directory;
 
-        public NTCreateAndXResponse() : base()
+        public override SMB1Command Init()
         {
+            base.Init();
+            OpLockLevel = default;
+            FID = default;
+            CreateDisposition = default;
+            CreateTime = default;
+            LastAccessTime = default;
+            LastWriteTime = default;
+            LastChangeTime = default;
+            ExtFileAttributes = default;
+            AllocationSize = default;
+            EndOfFile = default;
+            ResourceType = default;
+            NMPipeStatus = default;
+            Directory = default;
+
+            return this;
         }
 
-        public NTCreateAndXResponse(byte[] buffer, int offset) : base(buffer, offset, false)
+        public NTCreateAndXResponse Init(Span<byte> buffer, int offset)
         {
-            int parametersOffset = 4;
-            OpLockLevel = (OpLockLevel)ByteReader.ReadByte(this.SMBParameters, ref parametersOffset);
-            FID = LittleEndianReader.ReadUInt16(this.SMBParameters, ref parametersOffset);
-            CreateDisposition = (CreateDisposition)LittleEndianReader.ReadUInt32(this.SMBParameters, ref parametersOffset);
-            CreateTime = SMB1Helper.ReadNullableFileTime(this.SMBParameters, ref parametersOffset);
-            LastAccessTime = SMB1Helper.ReadNullableFileTime(this.SMBParameters, ref parametersOffset);
-            LastWriteTime = SMB1Helper.ReadNullableFileTime(this.SMBParameters, ref parametersOffset);
-            LastChangeTime = SMB1Helper.ReadNullableFileTime(this.SMBParameters, ref parametersOffset);
-            ExtFileAttributes = (ExtendedFileAttributes)LittleEndianReader.ReadUInt32(this.SMBParameters, ref parametersOffset);
-            AllocationSize = LittleEndianReader.ReadInt64(this.SMBParameters, ref parametersOffset);
-            EndOfFile = LittleEndianReader.ReadInt64(this.SMBParameters, ref parametersOffset);
-            ResourceType = (ResourceType)LittleEndianReader.ReadUInt16(this.SMBParameters, ref parametersOffset);
-            NMPipeStatus = NamedPipeStatus.Read(this.SMBParameters, ref parametersOffset);
-            Directory = (ByteReader.ReadByte(this.SMBParameters, ref parametersOffset) > 0);
+            base.Init(buffer, offset, false);
+            
+            var parametersOffset = 4;
+            OpLockLevel = (OpLockLevel)ByteReader.ReadByte(SmbParameters.Memory.Span, ref parametersOffset);
+            FID = LittleEndianReader.ReadUInt16(SmbParameters.Memory.Span, ref parametersOffset);
+            CreateDisposition = (CreateDisposition)LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref parametersOffset);
+            CreateTime = SMB1Helper.ReadNullableFileTime(SmbParameters.Memory.Span, ref parametersOffset);
+            LastAccessTime = SMB1Helper.ReadNullableFileTime(SmbParameters.Memory.Span, ref parametersOffset);
+            LastWriteTime = SMB1Helper.ReadNullableFileTime(SmbParameters.Memory.Span, ref parametersOffset);
+            LastChangeTime = SMB1Helper.ReadNullableFileTime(SmbParameters.Memory.Span, ref parametersOffset);
+            ExtFileAttributes = LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref parametersOffset);
+            AllocationSize = LittleEndianReader.ReadInt64(SmbParameters.Memory.Span, ref parametersOffset);
+            EndOfFile = LittleEndianReader.ReadInt64(SmbParameters.Memory.Span, ref parametersOffset);
+            ResourceType = (ResourceType)LittleEndianReader.ReadUInt16(SmbParameters.Memory.Span, ref parametersOffset);
+            NMPipeStatus = NamedPipeStatus.Read(SmbParameters.Memory.Span, ref parametersOffset);
+            Directory = (ByteReader.ReadByte(SmbParameters.Memory.Span, ref parametersOffset) > 0);
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            this.SMBParameters = new byte[ParametersLength];
-            int parametersOffset = 4;
-            ByteWriter.WriteByte(this.SMBParameters, ref parametersOffset, (byte)OpLockLevel);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, ref parametersOffset, FID);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref parametersOffset, (uint)CreateDisposition);
-            FileTimeHelper.WriteFileTime(this.SMBParameters, ref parametersOffset, CreateTime);
-            FileTimeHelper.WriteFileTime(this.SMBParameters, ref parametersOffset, LastAccessTime);
-            FileTimeHelper.WriteFileTime(this.SMBParameters, ref parametersOffset, LastWriteTime);
-            FileTimeHelper.WriteFileTime(this.SMBParameters, ref parametersOffset, LastChangeTime);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref parametersOffset, (uint)ExtFileAttributes);
-            LittleEndianWriter.WriteInt64(this.SMBParameters, ref parametersOffset, AllocationSize);
-            LittleEndianWriter.WriteInt64(this.SMBParameters, ref parametersOffset, EndOfFile);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, ref parametersOffset, (ushort)ResourceType);
-            NMPipeStatus.WriteBytes(this.SMBParameters, ref parametersOffset);
-            ByteWriter.WriteByte(this.SMBParameters, ref parametersOffset, Convert.ToByte(Directory));
+            SmbParameters = Arrays.Rent(ParametersLength);
+            var parametersOffset = 4;
+            BufferWriter.WriteByte(SmbParameters.Memory.Span, ref parametersOffset, (byte)OpLockLevel);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, ref parametersOffset, FID);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref parametersOffset, (uint)CreateDisposition);
+            FileTimeHelper.WriteFileTime(SmbParameters.Memory.Span, ref parametersOffset, CreateTime);
+            FileTimeHelper.WriteFileTime(SmbParameters.Memory.Span, ref parametersOffset, LastAccessTime);
+            FileTimeHelper.WriteFileTime(SmbParameters.Memory.Span, ref parametersOffset, LastWriteTime);
+            FileTimeHelper.WriteFileTime(SmbParameters.Memory.Span, ref parametersOffset, LastChangeTime);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref parametersOffset, (uint)ExtFileAttributes);
+            LittleEndianWriter.WriteInt64(SmbParameters.Memory.Span, ref parametersOffset, AllocationSize);
+            LittleEndianWriter.WriteInt64(SmbParameters.Memory.Span, ref parametersOffset, EndOfFile);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, ref parametersOffset, (ushort)ResourceType);
+            NMPipeStatus.WriteBytes(SmbParameters.Memory.Span, ref parametersOffset);
+            BufferWriter.WriteByte(SmbParameters.Memory.Span, ref parametersOffset, Convert.ToByte(Directory));
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_NT_CREATE_ANDX;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_NT_CREATE_ANDX;
     }
 }

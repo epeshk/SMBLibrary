@@ -4,9 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary
@@ -29,7 +28,7 @@ namespace SMBLibrary
         {
         }
 
-        public FileFullEAEntry(byte[] buffer, int offset)
+        public FileFullEAEntry(Span<byte> buffer, int offset)
         {
             NextEntryOffset = LittleEndianReader.ReadUInt32(buffer, ref offset);
             Flags = (ExtendedAttributeFlags)ByteReader.ReadByte(buffer, ref offset);
@@ -40,25 +39,19 @@ namespace SMBLibrary
             EaValue = ByteReader.ReadAnsiString(buffer, ref offset, EaValueLength);
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
             EaNameLength = (byte)EaName.Length;
             EaValueLength = (ushort)EaValue.Length;
             LittleEndianWriter.WriteUInt32(buffer, ref offset, NextEntryOffset);
-            ByteWriter.WriteByte(buffer, ref offset, (byte)Flags);
-            ByteWriter.WriteByte(buffer, ref offset, EaNameLength);
+            BufferWriter.WriteByte(buffer, ref offset, (byte)Flags);
+            BufferWriter.WriteByte(buffer, ref offset, EaNameLength);
             LittleEndianWriter.WriteUInt16(buffer, ref offset, EaValueLength);
-            ByteWriter.WriteAnsiString(buffer, ref offset, EaName);
-            ByteWriter.WriteByte(buffer, ref offset, 0); // terminating null
-            ByteWriter.WriteAnsiString(buffer, ref offset, EaValue);
+            BufferWriter.WriteAnsiString(buffer, ref offset, EaName);
+            BufferWriter.WriteByte(buffer, ref offset, 0); // terminating null
+            BufferWriter.WriteAnsiString(buffer, ref offset, EaValue);
         }
 
-        public int Length
-        {
-            get
-            {
-                return FixedLength + EaName.Length + 1 + EaValue.Length;
-            }
-        }
+        public int Length => FixedLength + EaName.Length + 1 + EaValue.Length;
     }
 }

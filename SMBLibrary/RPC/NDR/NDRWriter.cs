@@ -4,10 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
+
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.RPC
@@ -50,11 +51,12 @@ namespace SMBLibrary.RPC
             {
                 // Make a copy of all the deferred structures, additional deferred structures will be inserted to m_deferredStructures
                 // as we process the existing list
-                List<INDRStructure> deferredStructures = new List<INDRStructure>(m_deferredStructures);
+                var deferredStructures = new List<INDRStructure>(m_deferredStructures);
                 m_deferredStructures.Clear();
                 // Write all deferred types:
-                foreach (INDRStructure deferredStructure in deferredStructures)
+                for (var index = 0; index < deferredStructures.Count; index++)
                 {
+                    var deferredStructure = deferredStructures[index];
                     deferredStructure.Write(this);
                 }
             }
@@ -62,7 +64,7 @@ namespace SMBLibrary.RPC
 
         public void WriteUnicodeString(string value)
         {
-            NDRUnicodeString unicodeString = new NDRUnicodeString(value);
+            var unicodeString = new NDRUnicodeString(value);
             unicodeString.Write(this);
         }
 
@@ -80,9 +82,9 @@ namespace SMBLibrary.RPC
             }
 
             // Note: We do not bother searching for existing values
-            uint referentID = GetNextReferentID();
+            var referentID = GetNextReferentID();
             WriteUInt32(referentID);
-            NDRUnicodeString unicodeString = new NDRUnicodeString(value);
+            var unicodeString = new NDRUnicodeString(value);
             unicodeString.Write(this);
             m_referentToInstance.Add(referentID, unicodeString);
         }
@@ -93,12 +95,11 @@ namespace SMBLibrary.RPC
             if (structure == null)
             {
                 WriteUInt32(0); // null
-                return;
             }
             else
             {
                 // Note: We do not bother searching for existing values
-                uint referentID = GetNextReferentID();
+                var referentID = GetNextReferentID();
                 WriteUInt32(referentID);
                 AddDeferredStructure(structure);
                 m_referentToInstance.Add(referentID, structure);
@@ -108,7 +109,7 @@ namespace SMBLibrary.RPC
         // 14.2.2 - Alignment of Primitive Types
         public void WriteUInt16(ushort value)
         {
-            uint padding = (uint)(2 - (m_stream.Position % 2)) % 2;
+            var padding = (uint)(2 - (m_stream.Position % 2)) % 2;
             m_stream.Position += padding;
             LittleEndianWriter.WriteUInt16(m_stream, value);
         }
@@ -116,22 +117,22 @@ namespace SMBLibrary.RPC
         // 14.2.2 - Alignment of Primitive Types
         public void WriteUInt32(uint value)
         {
-            uint padding = (uint)(4 - (m_stream.Position % 4)) % 4;
+            var padding = (uint)(4 - (m_stream.Position % 4)) % 4;
             m_stream.Position += padding;
             LittleEndianWriter.WriteUInt32(m_stream, value);
         }
 
-        public byte[] GetBytes()
+        public IMemoryOwner<byte> GetBytes()
         {
-            byte[] buffer = new byte[m_stream.Length];
+            var buffer = Arrays.Rent((int) m_stream.Length);
             m_stream.Seek(0, SeekOrigin.Begin);
-            m_stream.Read(buffer, 0, buffer.Length);
+            m_stream.Read(buffer.Memory.Span);
             return buffer;
         }
 
         private uint GetNextReferentID()
         {
-            uint result = m_nextReferentID;
+            var result = m_nextReferentID;
             m_nextReferentID++;
             return result;
         }

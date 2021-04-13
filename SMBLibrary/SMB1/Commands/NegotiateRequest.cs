@@ -4,9 +4,12 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -19,54 +22,58 @@ namespace SMBLibrary.SMB1
         public const int SupportedBufferFormat = 0x02;
         // Data:
         public List<string> Dialects = new List<string>();
-
-        public NegotiateRequest() : base()
+        
+        public override SMB1Command Init()
         {
+            base.Init();
+            Dialects.Clear();
+            return this;
         }
 
-        public NegotiateRequest(byte[] buffer, int offset) : base(buffer, offset, false)
+        public NegotiateRequest Init(Span<byte> buffer, int offset)
         {
-            int dataOffset = 0;
-            while (dataOffset < this.SMBData.Length)
+            base.Init(buffer, offset, false);
+            
+            var dataOffset = 0;
+            while (dataOffset < SmbData.Length())
             {
-                byte bufferFormat = ByteReader.ReadByte(this.SMBData, ref dataOffset);
+                var bufferFormat = ByteReader.ReadByte(SmbData.Memory.Span, ref dataOffset);
                 if (bufferFormat != SupportedBufferFormat)
                 {
                     throw new InvalidDataException("Unsupported Buffer Format");
                 }
-                string dialect = ByteReader.ReadNullTerminatedAnsiString(this.SMBData, dataOffset);
+                var dialect = ByteReader.ReadNullTerminatedAnsiString(SmbData.Memory.Span, dataOffset);
                 Dialects.Add(dialect);
                 dataOffset += dialect.Length + 1;
             }
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            int length = 0;
-            foreach (string dialect in this.Dialects)
+            var length = 0;
+            for (var index = 0; index < Dialects.Count; index++)
             {
+                var dialect = Dialects[index];
                 length += 1 + dialect.Length + 1;
             }
 
-            this.SMBParameters = new byte[0];
-            this.SMBData = new byte[length];
-            int offset = 0;
-            foreach (string dialect in this.Dialects)
+            SmbParameters = MemoryOwner<byte>.Empty;
+            SmbData = Arrays.Rent(length);
+            var offset = 0;
+            for (var index = 0; index < Dialects.Count; index++)
             {
-                ByteWriter.WriteByte(this.SMBData, offset, 0x02);
-                ByteWriter.WriteAnsiString(this.SMBData, offset + 1, dialect, dialect.Length);
-                ByteWriter.WriteByte(this.SMBData, offset + 1 + dialect.Length, 0x00);
+                var dialect = Dialects[index];
+                BufferWriter.WriteByte(SmbData.Memory.Span, offset, 0x02);
+                BufferWriter.WriteAnsiString(SmbData.Memory.Span, offset + 1, dialect, dialect.Length);
+                BufferWriter.WriteByte(SmbData.Memory.Span, offset + 1 + dialect.Length, 0x00);
                 offset += 1 + dialect.Length + 1;
             }
+
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_NEGOTIATE;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_NEGOTIATE;
     }
 }

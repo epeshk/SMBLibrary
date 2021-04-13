@@ -4,11 +4,12 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
 using System.IO;
+using SMBLibrary.Client;
 using SMBLibrary.SMB2;
-using Utilities;
 
 namespace SMBLibrary.Server
 {
@@ -46,14 +47,14 @@ namespace SMBLibrary.Server
         {
             for (uint offset = 0; offset < UInt32.MaxValue; offset++)
             {
-                uint treeID = (uint)(m_nextTreeID + offset);
+                var treeID = m_nextTreeID + offset;
                 if (treeID == 0 || treeID == 0xFFFFFFFF)
                 {
                     continue;
                 }
                 if (!m_connectedTrees.ContainsKey(treeID))
                 {
-                    m_nextTreeID = (uint)(treeID + 1);
+                    m_nextTreeID = treeID + 1;
                     return treeID;
                 }
             }
@@ -64,7 +65,7 @@ namespace SMBLibrary.Server
         {
             lock (m_connectedTrees)
             {
-                uint? treeID = AllocateTreeID();
+                var treeID = AllocateTreeID();
                 if (treeID.HasValue)
                 {
                     m_connectedTrees.Add(treeID.Value, share);
@@ -88,10 +89,10 @@ namespace SMBLibrary.Server
             {
                 lock (m_openFiles)
                 {
-                    List<ulong> fileIDList = new List<ulong>(m_openFiles.Keys);
-                    foreach (ulong fileID in fileIDList)
+                    var fileIDList = new List<ulong>(m_openFiles.Keys);
+                    foreach (var fileID in fileIDList)
                     {
-                        OpenFileObject openFile = m_openFiles[fileID];
+                        var openFile = m_openFiles[fileID];
                         if (openFile.TreeID == treeID)
                         {
                             share.FileStore.CloseFile(openFile.Handle);
@@ -116,14 +117,14 @@ namespace SMBLibrary.Server
         {
             for (ulong offset = 0; offset < UInt64.MaxValue; offset++)
             {
-                ulong volatileFileID = (ulong)(m_nextVolatileFileID + offset);
+                var volatileFileID = m_nextVolatileFileID + offset;
                 if (volatileFileID == 0 || volatileFileID == 0xFFFFFFFFFFFFFFFF)
                 {
                     continue;
                 }
                 if (!m_openFiles.ContainsKey(volatileFileID))
                 {
-                    m_nextVolatileFileID = (ulong)(volatileFileID + 1);
+                    m_nextVolatileFileID = volatileFileID + 1;
                     return volatileFileID;
                 }
             }
@@ -134,10 +135,10 @@ namespace SMBLibrary.Server
         {
             lock (m_openFiles)
             {
-                ulong? volatileFileID = AllocateVolatileFileID();
+                var volatileFileID = AllocateVolatileFileID();
                 if (volatileFileID.HasValue)
                 {
-                    FileID fileID = new FileID();
+                    var fileID = new FileID();
                     fileID.Volatile = volatileFileID.Value;
                     // [MS-SMB2] FileId.Persistent MUST be set to Open.DurableFileId.
                     // Note: We don't support durable handles so we use volatileFileID.
@@ -167,10 +168,10 @@ namespace SMBLibrary.Server
 
         public List<OpenFileInformation> GetOpenFilesInformation()
         {
-            List<OpenFileInformation> result = new List<OpenFileInformation>();
+            var result = new List<OpenFileInformation>();
             lock (m_openFiles)
             {
-                foreach (OpenFileObject openFile in m_openFiles.Values)
+                foreach (var openFile in m_openFiles.Values)
                 {
                     result.Add(new OpenFileInformation(openFile.ShareName, openFile.Path, openFile.FileAccess, openFile.OpenedDT));
                 }
@@ -178,9 +179,9 @@ namespace SMBLibrary.Server
             return result;
         }
 
-        public OpenSearch AddOpenSearch(FileID fileID, List<QueryDirectoryFileInformation> entries, int enumerationLocation)
+        public OpenSearch AddOpenSearch(FileID fileID, List<FindFilesQueryResult> entries, int enumerationLocation)
         {
-            OpenSearch openSearch = new OpenSearch(entries, enumerationLocation);
+            var openSearch = new OpenSearch(entries, enumerationLocation);
             m_openSearches.Add(fileID.Volatile, openSearch);
             return openSearch;
         }
@@ -202,59 +203,23 @@ namespace SMBLibrary.Server
         /// </summary>
         public void Close()
         {
-            List<uint> treeIDList = new List<uint>(m_connectedTrees.Keys);
-            foreach (uint treeID in treeIDList)
+            var treeIDList = new List<uint>(m_connectedTrees.Keys);
+            foreach (var treeID in treeIDList)
             {
                 DisconnectTree(treeID);
             }
         }
 
-        public byte[] SessionKey
-        {
-            get
-            {
-                return m_sessionKey;
-            }
-        }
+        public byte[] SessionKey => m_sessionKey;
 
-        public SecurityContext SecurityContext
-        {
-            get
-            {
-                return m_securityContext;
-            }
-        }
+        public SecurityContext SecurityContext => m_securityContext;
 
-        public string UserName
-        {
-            get
-            {
-                return m_securityContext.UserName;
-            }
-        }
+        public string UserName => m_securityContext.UserName;
 
-        public string MachineName
-        {
-            get
-            {
-                return m_securityContext.MachineName;
-            }
-        }
+        public string MachineName => m_securityContext.MachineName;
 
-        public DateTime CreationDT
-        {
-            get
-            {
-                return m_creationDT;
-            }
-        }
+        public DateTime CreationDT => m_creationDT;
 
-        public bool SigningRequired
-        {
-            get
-            {
-                return m_signingRequired;
-            }
-        }
+        public bool SigningRequired => m_signingRequired;
     }
 }

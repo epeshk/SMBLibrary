@@ -4,6 +4,7 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
 using Utilities;
@@ -28,31 +29,31 @@ namespace SMBLibrary
             AclRevision = 0x02;
         }
 
-        public ACL(byte[] buffer, int offset)
+        public ACL(Span<byte> buffer, int offset)
         {
             AclRevision = ByteReader.ReadByte(buffer, offset + 0);
             Sbz1 = ByteReader.ReadByte(buffer, offset + 1);
-            ushort aclSize = LittleEndianConverter.ToUInt16(buffer, offset + 2);
-            ushort aceCount = LittleEndianConverter.ToUInt16(buffer, offset + 4);
+            var aclSize = LittleEndianConverter.ToUInt16(buffer, offset + 2);
+            var aceCount = LittleEndianConverter.ToUInt16(buffer, offset + 4);
             Sbz2 = LittleEndianConverter.ToUInt16(buffer, offset + 6);
 
             offset += 8;
-            for (int index = 0; index < aceCount; index++)
+            for (var index = 0; index < aceCount; index++)
             {
-                ACE ace = ACE.GetAce(buffer, offset);
-                this.Add(ace);
+                var ace = ACE.GetAce(buffer, offset);
+                Add(ace);
                 offset += ace.Length;
             }
         }
 
-        public void WriteBytes(byte[] buffer, ref int offset)
+        public void WriteBytes(Span<byte> buffer, ref int offset)
         {
-            ByteWriter.WriteByte(buffer, ref offset, AclRevision);
-            ByteWriter.WriteByte(buffer, ref offset, Sbz1);
+            BufferWriter.WriteByte(buffer, ref offset, AclRevision);
+            BufferWriter.WriteByte(buffer, ref offset, Sbz1);
             LittleEndianWriter.WriteUInt16(buffer, ref offset, (ushort)Length);
             LittleEndianWriter.WriteUInt16(buffer, ref offset, (ushort)Count);
             LittleEndianWriter.WriteUInt16(buffer, ref offset, Sbz2);
-            foreach (ACE ace in this)
+            foreach (var ace in this)
             {
                 ace.WriteBytes(buffer, ref offset);
             }
@@ -62,8 +63,8 @@ namespace SMBLibrary
         {
             get
             {
-                int length = FixedLength;
-                foreach (ACE ace in this)
+                var length = FixedLength;
+                foreach (var ace in this)
                 {
                     length += ace.Length;
                 }

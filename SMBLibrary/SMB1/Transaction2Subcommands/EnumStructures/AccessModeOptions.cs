@@ -4,10 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
-using Utilities;
 
 namespace SMBLibrary.SMB1
 {
@@ -64,7 +62,7 @@ namespace SMBLibrary.SMB1
         public CachedMode CachedMode;
         public WriteThroughMode WriteThroughMode;
 
-        public AccessModeOptions(byte[] buffer, int offset)
+        public AccessModeOptions(Span<byte> buffer, int offset)
         {
             AccessMode = (AccessMode)(buffer[offset + 0] & 0x07);
             SharingMode = (SharingMode)((buffer[offset + 0] & 0x70) >> 4);
@@ -73,7 +71,7 @@ namespace SMBLibrary.SMB1
             WriteThroughMode = (WriteThroughMode)((buffer[offset + 1] & 0x40) >> 6);
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
             buffer[offset + 0] = (byte)((byte)AccessMode & 0x07);
             buffer[offset + 0] |= (byte)(((byte)SharingMode << 4) & 0x70);
@@ -82,13 +80,13 @@ namespace SMBLibrary.SMB1
             buffer[offset + 1] |= (byte)(((byte)WriteThroughMode << 6) & 0x40);
         }
 
-        public void WriteBytes(byte[] buffer, ref int offset)
+        public void WriteBytes(Span<byte> buffer, ref int offset)
         {
             WriteBytes(buffer, offset);
             offset += Length;
         }
 
-        public static AccessModeOptions Read(byte[] buffer, ref int offset)
+        public static AccessModeOptions Read(Span<byte> buffer, ref int offset)
         {
             offset += Length;
             return new AccessModeOptions(buffer, offset - Length);

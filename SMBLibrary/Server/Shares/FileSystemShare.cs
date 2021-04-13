@@ -4,8 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using System.IO;
 using Utilities;
 
@@ -42,46 +42,28 @@ namespace SMBLibrary.Server
             return HasAccess(securityContext, path, FileAccess.Read);
         }
 
-        public bool HasWriteAccess(SecurityContext securityContext, string path)
+        public bool HasWriteAccess(SecurityContext securityContext, ReadOnlySpan<char> path)
         {
             return HasAccess(securityContext, path, FileAccess.Write);
         }
 
-        public bool HasAccess(SecurityContext securityContext, string path, FileAccess requestedAccess)
+        public bool HasAccess(SecurityContext securityContext, ReadOnlySpan<char> path, FileAccess requestedAccess)
         {
             // To be thread-safe we must capture the delegate reference first
-            EventHandler<AccessRequestArgs> handler = AccessRequested;
+            var handler = AccessRequested;
             if (handler != null)
             {
-                AccessRequestArgs args = new AccessRequestArgs(securityContext.UserName, path, requestedAccess, securityContext.MachineName, securityContext.ClientEndPoint);
+                var args = new AccessRequestArgs(securityContext.UserName, path, requestedAccess, securityContext.MachineName, securityContext.ClientEndPoint);
                 handler(this, args);
                 return args.Allow;
             }
             return true;
         }
 
-        public string Name
-        {
-            get
-            {
-                return m_name;
-            }
-        }
+        public string Name => m_name;
 
-        public INTFileStore FileStore
-        {
-            get
-            {
-                return m_fileSystem;
-            }
-        }
+        public INTFileStore FileStore => m_fileSystem;
 
-        public CachingPolicy CachingPolicy
-        {
-            get
-            {
-                return m_cachingPolicy;
-            }
-        }
+        public CachingPolicy CachingPolicy => m_cachingPolicy;
     }
 }

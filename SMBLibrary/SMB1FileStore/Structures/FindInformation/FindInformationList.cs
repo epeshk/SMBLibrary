@@ -4,59 +4,70 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Text;
-using Utilities;
+using MemoryPools.Memory;
 
 namespace SMBLibrary.SMB1
 {
-    public class FindInformationList : List<FindInformation>
+    public class FindInformationList : List<FindInformation>, IDisposable
     {
         public FindInformationList()
         {
         }
 
-        public FindInformationList(byte[] buffer, FindInformationLevel informationLevel, bool isUnicode)
+        public FindInformationList(Span<byte> buffer, FindInformationLevel informationLevel, bool isUnicode)
         {
-            int offset = 0;
-            while (offset < buffer.Length)
+            var offset = 0;
+            FindInformation entry;
+            do
             {
-                FindInformation entry = FindInformation.ReadEntry(buffer, offset, informationLevel, isUnicode);
-                this.Add(entry);
-                offset += (int)entry.NextEntryOffset;
-            }
+	            entry = FindInformation.ReadEntry(buffer, offset, informationLevel, isUnicode);
+                Add(entry);
+                offset += (int) entry.NextEntryOffset;
+            } while (entry.NextEntryOffset != 0 && offset < buffer.Length);
         }
 
-        public byte[] GetBytes(bool isUnicode)
+        public IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            for(int index = 0; index < this.Count - 1; index++)
+            for(var index = 0; index < Count - 1; index++)
             {
-                FindInformation entry = this[index];
-                int entryLength = entry.GetLength(isUnicode);
+                var entry = this[index];
+                var entryLength = entry.GetLength(isUnicode);
                 entry.NextEntryOffset = (uint)entryLength;
 
             }
-            int length = GetLength(isUnicode);
-            byte[] buffer = new byte[length];
-            int offset = 0;
-            foreach (FindInformation entry in this)
+            var length = GetLength(isUnicode);
+            var buffer = Arrays.Rent(length);
+            var offset = 0;
+            foreach (var entry in this)
             {
-                entry.WriteBytes(buffer, ref offset, isUnicode);
+                entry.WriteBytes(buffer.Memory.Span, ref offset, isUnicode);
             }
             return buffer;
         }
 
         public int GetLength(bool isUnicode)
         {
-            int length = 0;
-            for (int index = 0; index < this.Count; index++)
+            var length = 0;
+            for (var index = 0; index < Count; index++)
             {
-                FindInformation entry = this[index];
-                int entryLength = entry.GetLength(isUnicode);
+                var entry = this[index];
+                var entryLength = entry.GetLength(isUnicode);
                 length += entryLength;
             }
             return length;
+        }
+
+        public void Dispose()
+        {
+            foreach (var entry in this)
+            {
+                entry.Dispose();
+            }
+            Clear();
         }
     }
 }

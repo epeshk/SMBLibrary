@@ -4,11 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Net;
 using System.Net.Sockets;
-using System.Text;
 
 namespace Utilities
 {
@@ -26,7 +24,7 @@ namespace Utilities
         {
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
             // https://msdn.microsoft.com/en-us/library/dd877220.aspx
-            byte[] tcp_keepalive = new byte[12];
+            var tcp_keepalive = new byte[12];
             LittleEndianWriter.WriteUInt32(tcp_keepalive, 0, Convert.ToUInt32(enable));
             LittleEndianWriter.WriteUInt32(tcp_keepalive, 4, (uint)timeout.TotalMilliseconds);
             LittleEndianWriter.WriteUInt32(tcp_keepalive, 8, (uint)interval.TotalMilliseconds);

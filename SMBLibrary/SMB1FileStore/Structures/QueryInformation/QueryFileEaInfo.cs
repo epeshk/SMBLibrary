@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -21,22 +23,18 @@ namespace SMBLibrary.SMB1
         {
         }
 
-        public QueryFileEaInfo(byte[] buffer, int offset)
+        public QueryFileEaInfo(Span<byte> buffer, int offset)
         {
             EaSize = LittleEndianConverter.ToUInt32(buffer, offset);
         }
-
-        public override byte[] GetBytes()
+        
+        public override IMemoryOwner<byte> GetBytes()
         {
-            return LittleEndianConverter.GetBytes(EaSize);
+            var buf = Arrays.Rent(4);
+            LittleEndianConverter.GetBytes(buf.Memory.Span, EaSize);
+            return buf;
         }
 
-        public override QueryInformationLevel InformationLevel
-        {
-            get
-            {
-                return QueryInformationLevel.SMB_QUERY_FILE_EA_INFO;
-            }
-        }
+        public override QueryInformationLevel InformationLevel => QueryInformationLevel.SMB_QUERY_FILE_EA_INFO;
     }
 }

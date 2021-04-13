@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.NetBios
@@ -13,36 +15,36 @@ namespace SMBLibrary.NetBios
     /// <summary>
     /// [RFC 1002] 4.3.5. SESSION RETARGET RESPONSE PACKET
     /// </summary>
-    public class SessionRetargetResponsePacket : SessionPacket
+    public class SessionRetargetResponsePacket : SessionPacket<SessionRetargetResponsePacket>
     {
         uint IPAddress;
         ushort Port;
 
-        public SessionRetargetResponsePacket() : base()
+        public SessionRetargetResponsePacket()
         {
-            this.Type = SessionPacketTypeName.RetargetSessionResponse;
+            Type = SessionPacketTypeName.RetargetSessionResponse;
         }
 
-        public SessionRetargetResponsePacket(byte[] buffer, int offset) : base(buffer, offset)
+        public override void Init(Span<byte> buffer)
         {
-            IPAddress = BigEndianConverter.ToUInt32(this.Trailer, offset + 0);
-            Port = BigEndianConverter.ToUInt16(this.Trailer, offset + 4);
+            base.Init(buffer);
+            IPAddress = BigEndianConverter.ToUInt32(Trailer.Memory.Span, 0);
+            Port = BigEndianConverter.ToUInt16(Trailer.Memory.Span, 4);
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            this.Trailer = new byte[6];
-            BigEndianWriter.WriteUInt32(this.Trailer, 0, IPAddress);
-            BigEndianWriter.WriteUInt16(this.Trailer, 4, Port);
+            Trailer = Arrays.Rent(6);
+            BigEndianWriter.WriteUInt32(Trailer.Memory.Span, 0, IPAddress);
+            BigEndianWriter.WriteUInt16(Trailer.Memory.Span, 4, Port);
             return base.GetBytes();
         }
 
-        public override int Length
+        public override int Length => HeaderLength + 6;
+        public override void Dispose()
         {
-            get
-            {
-                return HeaderLength + 6;
-            }
+            base.Dispose();
+            ObjectsPool<SessionRetargetResponsePacket>.Return(this);
         }
     }
 }

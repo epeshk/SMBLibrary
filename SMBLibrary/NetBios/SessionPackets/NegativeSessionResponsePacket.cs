@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.NetBios
@@ -13,34 +15,35 @@ namespace SMBLibrary.NetBios
     /// <summary>
     /// [RFC 1002] 4.3.4. NEGATIVE SESSION RESPONSE PACKET
     /// </summary>
-    public class NegativeSessionResponsePacket : SessionPacket
+    public class NegativeSessionResponsePacket : SessionPacket<NegativeSessionResponsePacket>
     {
         public byte ErrorCode;
 
-        public NegativeSessionResponsePacket() : base()
+        public NegativeSessionResponsePacket()
         {
-            this.Type = SessionPacketTypeName.NegativeSessionResponse;
+            Type = SessionPacketTypeName.NegativeSessionResponse;
         }
 
-        public NegativeSessionResponsePacket(byte[] buffer, int offset) : base(buffer, offset)
+        public override void Init(Span<byte> buffer)
         {
-            ErrorCode = ByteReader.ReadByte(this.Trailer, offset + 0);
+            base.Init(buffer);
+            ErrorCode = ByteReader.ReadByte(Trailer.Memory.Span, 0);
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            this.Trailer = new byte[1];
-            this.Trailer[0] = ErrorCode;
+            Trailer = Arrays.Rent(1);
+            Trailer.Memory.Span[0] = ErrorCode;
 
             return base.GetBytes();
         }
 
-        public override int Length
+        public override int Length => HeaderLength + 1;
+
+        public override void Dispose()
         {
-            get
-            {
-                return HeaderLength + 1;
-            }
+            base.Dispose();
+            ObjectsPool<NegativeSessionResponsePacket>.Return(this);
         }
     }
 }

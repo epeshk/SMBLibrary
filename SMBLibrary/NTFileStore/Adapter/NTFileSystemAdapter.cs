@@ -4,9 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.IO;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary
@@ -25,15 +27,15 @@ namespace SMBLibrary
             m_fileSystem = fileSystem;
         }
 
-        public NTStatus CreateFile(out object handle, out FileStatus fileStatus, string path, AccessMask desiredAccess, FileAttributes fileAttributes, ShareAccess shareAccess, CreateDisposition createDisposition, CreateOptions createOptions, SecurityContext securityContext)
+        public NTStatus CreateFile(out object handle, out FileStatus fileStatus, IMemoryOwner<char> path, AccessMask desiredAccess, FileAttributes fileAttributes, ShareAccess shareAccess, CreateDisposition createDisposition, CreateOptions createOptions, SecurityContext securityContext)
         {
             handle = null;
             fileStatus = FileStatus.FILE_DOES_NOT_EXIST;
-            FileAccess createAccess = NTFileStoreHelper.ToCreateFileAccess(desiredAccess, createDisposition);
-            bool requestedWriteAccess = (createAccess & FileAccess.Write) > 0;
+            var createAccess = NTFileStoreHelper.ToCreateFileAccess(desiredAccess, createDisposition);
+            var requestedWriteAccess = (createAccess & FileAccess.Write) > 0;
 
-            bool forceDirectory = (createOptions & CreateOptions.FILE_DIRECTORY_FILE) > 0;
-            bool forceFile = (createOptions & CreateOptions.FILE_NON_DIRECTORY_FILE) > 0;
+            var forceDirectory = (createOptions & CreateOptions.FILE_DIRECTORY_FILE) > 0;
+            var forceFile = (createOptions & CreateOptions.FILE_NON_DIRECTORY_FILE) > 0;
 
             if (forceDirectory & (createDisposition != CreateDisposition.FILE_CREATE &&
                                   createDisposition != CreateDisposition.FILE_OPEN &&
@@ -44,7 +46,7 @@ namespace SMBLibrary
             }
 
             // Windows will try to access named streams (alternate data streams) regardless of the FILE_NAMED_STREAMS flag, we need to prevent this behaviour.
-            if (!m_fileSystem.SupportsNamedStreams && path.Contains(":"))
+            if (!m_fileSystem.SupportsNamedStreams && path.Memory.Span.IndexOf(':') >=0)
             {
                 // Windows Server 2003 will return STATUS_OBJECT_NAME_NOT_FOUND
                 return NTStatus.STATUS_NO_SUCH_FILE;
@@ -53,7 +55,8 @@ namespace SMBLibrary
             FileSystemEntry entry = null;
             try
             {
-                entry = m_fileSystem.GetEntry(path);
+                // tostring
+                entry = m_fileSystem.GetEntry(path.Memory.ToString());
             }
             catch (FileNotFoundException)
             {
@@ -65,14 +68,12 @@ namespace SMBLibrary
             {
                 if (ex is IOException || ex is UnauthorizedAccessException)
                 {
-                    NTStatus status = ToNTStatus(ex);
-                    Log(Severity.Verbose, "CreateFile: Error retrieving '{0}'. {1}.", path, status);
+                    var status = ToNTStatus(ex);
+                    Log(Severity.Verbose, "CreateFile: Error retrieving '{0}'. {1}.", path.Memory.ToString(), status);
                     return status;
                 }
-                else
-                {
-                    throw;
-                }
+
+                throw;
             }
 
             if (createDisposition == CreateDisposition.FILE_OPEN)
@@ -97,8 +98,9 @@ namespace SMBLibrary
             {
                 if (entry != null)
                 {
-                    // File already exists, fail the request
-                    Log(Severity.Verbose, "CreateFile: File '{0}' already exists.", path);
+                    // File already exists, fail the request 
+                    // tostring
+                    Log(Severity.Verbose, "CreateFile: File '{0}' already exists.", path.Memory.ToString());
                     fileStatus = FileStatus.FILE_EXISTS;
                     return NTStatus.STATUS_OBJECT_NAME_COLLISION;
                 }
@@ -112,27 +114,28 @@ namespace SMBLibrary
                 {
                     if (forceDirectory)
                     {
-                        Log(Severity.Information, "CreateFile: Creating directory '{0}'", path);
-                        entry = m_fileSystem.CreateDirectory(path);
+                        // tostring
+                        Log(Severity.Information, "CreateFile: Creating directory '{0}'", path.Memory.ToString());
+                        entry = m_fileSystem.CreateDirectory(path.Memory.ToString());
                     }
                     else
                     {
-                        Log(Severity.Information, "CreateFile: Creating file '{0}'", path);
-                        entry = m_fileSystem.CreateFile(path);
+                        // tostring
+                        Log(Severity.Information, "CreateFile: Creating file '{0}'", path.Memory.ToString());
+                        entry = m_fileSystem.CreateFile(path.Memory.ToString());
                     }
                 }
                 catch (Exception ex)
                 {
                     if (ex is IOException || ex is UnauthorizedAccessException)
                     {
-                        NTStatus status = ToNTStatus(ex);
-                        Log(Severity.Verbose, "CreateFile: Error creating '{0}'. {1}.", path, status);
+                        var status = ToNTStatus(ex);
+                        // tostring
+                        Log(Severity.Verbose, "CreateFile: Error creating '{0}'. {1}.", path.Memory.ToString(), status);
                         return status;
                     }
-                    else
-                    {
-                        throw;
-                    }
+
+                    throw;
                 }
                 fileStatus = FileStatus.FILE_CREATED;
             }
@@ -157,27 +160,28 @@ namespace SMBLibrary
                     {
                         if (forceDirectory)
                         {
-                            Log(Severity.Information, "CreateFile: Creating directory '{0}'", path);
-                            entry = m_fileSystem.CreateDirectory(path);
+                            // tostring
+                            Log(Severity.Information, "CreateFile: Creating directory '{0}'", path.Memory.ToString());
+                            entry = m_fileSystem.CreateDirectory(path.Memory.ToString());
                         }
                         else
                         {
-                            Log(Severity.Information, "CreateFile: Creating file '{0}'", path);
-                            entry = m_fileSystem.CreateFile(path);
+                            // tostring
+                            Log(Severity.Information, "CreateFile: Creating file '{0}'", path.Memory.ToString());
+                            entry = m_fileSystem.CreateFile(path.Memory.ToString());
                         }
                     }
                     catch (Exception ex)
                     {
                         if (ex is IOException || ex is UnauthorizedAccessException)
                         {
-                            NTStatus status = ToNTStatus(ex);
-                            Log(Severity.Verbose, "CreateFile: Error creating '{0}'. {1}.", path, status);
+                            var status = ToNTStatus(ex);
+                            // tostring
+                            Log(Severity.Verbose, "CreateFile: Error creating '{0}'. {1}.", path.Memory.ToString(), status);
                             return status;
                         }
-                        else
-                        {
-                            throw;
-                        }
+
+                        throw;
                     }
                     fileStatus = FileStatus.FILE_CREATED;
                 }
@@ -209,21 +213,21 @@ namespace SMBLibrary
                             // Truncate the file
                             try
                             {
-                                Stream temp = m_fileSystem.OpenFile(path, FileMode.Truncate, FileAccess.ReadWrite, FileShare.ReadWrite, FileOptions.None);
+                                // tostring
+                                var temp = m_fileSystem.OpenFile(path.Memory.ToString(), FileMode.Truncate, FileAccess.ReadWrite, FileShare.ReadWrite, FileOptions.None);
                                 temp.Close();
                             }
                             catch (Exception ex)
                             {
                                 if (ex is IOException || ex is UnauthorizedAccessException)
                                 {
-                                    NTStatus status = ToNTStatus(ex);
-                                    Log(Severity.Verbose, "CreateFile: Error truncating '{0}'. {1}.", path, status);
+                                    var status = ToNTStatus(ex);
+                                    // tostring
+                                    Log(Severity.Verbose, "CreateFile: Error truncating '{0}'. {1}.", path.Memory.ToString(), status);
                                     return status;
                                 }
-                                else
-                                {
-                                    throw;
-                                }
+
+                                throw;
                             }
                             fileStatus = FileStatus.FILE_OVERWRITTEN;
                         }
@@ -232,47 +236,48 @@ namespace SMBLibrary
                             // Delete the old file
                             try
                             {
-                                m_fileSystem.Delete(path);
+                                // tostring
+                                m_fileSystem.Delete(path.Memory.ToString());
                             }
                             catch (Exception ex)
                             {
                                 if (ex is IOException || ex is UnauthorizedAccessException)
                                 {
-                                    NTStatus status = ToNTStatus(ex);
-                                    Log(Severity.Verbose, "CreateFile: Error deleting '{0}'. {1}.", path, status);
+                                    var status = ToNTStatus(ex);
+                                    // tostring
+                                    Log(Severity.Verbose, "CreateFile: Error deleting '{0}'. {1}.", path.Memory.ToString(), status);
                                     return status;
                                 }
-                                else
-                                {
-                                    throw;
-                                }
+
+                                throw;
                             }
 
                             try
                             {
                                 if (forceDirectory)
                                 {
-                                    Log(Severity.Information, "CreateFile: Creating directory '{0}'", path);
-                                    entry = m_fileSystem.CreateDirectory(path);
+                                    // tostring
+                                    Log(Severity.Information, "CreateFile: Creating directory '{0}'", path.Memory.ToString());
+                                    entry = m_fileSystem.CreateDirectory(path.Memory.ToString());
                                 }
                                 else
                                 {
-                                    Log(Severity.Information, "CreateFile: Creating file '{0}'", path);
-                                    entry = m_fileSystem.CreateFile(path);
+                                    // tostring
+                                    Log(Severity.Information, "CreateFile: Creating file '{0}'", path.Memory.ToString());
+                                    entry = m_fileSystem.CreateFile(path.Memory.ToString());
                                 }
                             }
                             catch (Exception ex)
                             {
                                 if (ex is IOException || ex is UnauthorizedAccessException)
                                 {
-                                    NTStatus status = ToNTStatus(ex);
-                                    Log(Severity.Verbose, "CreateFile: Error creating '{0}'. {1}.", path, status);
+                                    var status = ToNTStatus(ex);
+                                    // tostring
+                                    Log(Severity.Verbose, "CreateFile: Error creating '{0}'. {1}.", path.Memory.ToString(), status);
                                     return status;
                                 }
-                                else
-                                {
-                                    throw;
-                                }
+
+                                throw;
                             }
                             fileStatus = FileStatus.FILE_SUPERSEDED;
                         }
@@ -284,23 +289,23 @@ namespace SMBLibrary
                 return NTStatus.STATUS_INVALID_PARAMETER;
             }
 
-            FileAccess fileAccess = NTFileStoreHelper.ToFileAccess(desiredAccess);
+            var fileAccess = NTFileStoreHelper.ToFileAccess(desiredAccess);
             Stream stream;
-            if (fileAccess == (FileAccess)0 || entry.IsDirectory)
+            if (fileAccess == 0 || entry.IsDirectory)
             {
                 stream = null;
             }
             else
             {
                 // Note that SetFileInformationByHandle/FILE_DISPOSITION_INFO has no effect if the handle was opened with FILE_DELETE_ON_CLOSE.
-                NTStatus openStatus = OpenFileStream(out stream, path, fileAccess, shareAccess, createOptions);
+                var openStatus = OpenFileStream(out stream, path, fileAccess, shareAccess, createOptions);
                 if (openStatus != NTStatus.STATUS_SUCCESS)
                 {
                     return openStatus;
                 }
             }
 
-            bool deleteOnClose = (createOptions & CreateOptions.FILE_DELETE_ON_CLOSE) > 0;
+            var deleteOnClose = (createOptions & CreateOptions.FILE_DELETE_ON_CLOSE) > 0;
             handle = new FileHandle(path, entry.IsDirectory, stream, deleteOnClose);
             if (fileStatus != FileStatus.FILE_CREATED &&
                 fileStatus != FileStatus.FILE_OVERWRITTEN &&
@@ -311,38 +316,39 @@ namespace SMBLibrary
             return NTStatus.STATUS_SUCCESS;
         }
 
-        private NTStatus OpenFileStream(out Stream stream, string path, FileAccess fileAccess, ShareAccess shareAccess, CreateOptions openOptions)
+        private NTStatus OpenFileStream(out Stream stream, IMemoryOwner<char> path, FileAccess fileAccess, ShareAccess shareAccess, CreateOptions openOptions)
         {
             stream = null;
-            FileShare fileShare = NTFileStoreHelper.ToFileShare(shareAccess);
-            FileOptions fileOptions = ToFileOptions(openOptions);
-            string fileShareString = fileShare.ToString().Replace(", ", "|");
-            string fileOptionsString = ToFileOptionsString(fileOptions);
+            var fileShare = NTFileStoreHelper.ToFileShare(shareAccess);
+            var fileOptions = ToFileOptions(openOptions);
+            var fileShareString = fileShare.ToString().Replace(", ", "|");
+            var fileOptionsString = ToFileOptionsString(fileOptions);
             try
             {
-                stream = m_fileSystem.OpenFile(path, FileMode.Open, fileAccess, fileShare, fileOptions);
+                // tostring
+                stream = m_fileSystem.OpenFile(new string(path.Memory.Span), FileMode.Open, fileAccess, fileShare, fileOptions);
             }
             catch (Exception ex)
             {
                 if (ex is IOException || ex is UnauthorizedAccessException)
                 {
-                    NTStatus status = ToNTStatus(ex);
-                    Log(Severity.Verbose, "OpenFile: Cannot open '{0}', Access={1}, Share={2}. NTStatus: {3}.", path, fileAccess, fileShareString, status);
+                    var status = ToNTStatus(ex);
+                    // tostring
+                    Log(Severity.Verbose, "OpenFile: Cannot open '{0}', Access={1}, Share={2}. NTStatus: {3}.", path.Memory.ToString(), fileAccess, fileShareString, status);
                     return status;
                 }
-                else
-                {
-                    throw;
-                }
+
+                throw;
             }
 
-            Log(Severity.Information, "OpenFileStream: Opened '{0}', Access={1}, Share={2}, FileOptions={3}", path, fileAccess, fileShareString, fileOptionsString);
+            // tostring
+            Log(Severity.Information, "OpenFileStream: Opened '{0}', Access={1}, Share={2}, FileOptions={3}", path.Memory.ToString(), fileAccess, fileShareString, fileOptionsString);
             return NTStatus.STATUS_SUCCESS;
         }
 
         public NTStatus CloseFile(object handle)
         {
-            FileHandle fileHandle = (FileHandle)handle;
+            var fileHandle = (FileHandle)handle;
             if (fileHandle.Stream != null)
             {
                 Log(Severity.Verbose, "CloseFile: Closing '{0}'.", fileHandle.Path);
@@ -354,24 +360,24 @@ namespace SMBLibrary
             {
                 try
                 {
-                    m_fileSystem.Delete(fileHandle.Path);
-                    Log(Severity.Verbose, "CloseFile: Deleted '{0}'.", fileHandle.Path);
+                    m_fileSystem.Delete(fileHandle.Path.Memory.ToString());
+                    Log(Severity.Verbose, "CloseFile: Deleted '{0}'.", fileHandle.Path.Memory);
                 }
                 catch
                 {
-                    Log(Severity.Verbose, "CloseFile: Error deleting '{0}'.", fileHandle.Path);
+                    Log(Severity.Verbose, "CloseFile: Error deleting '{0}'.", fileHandle.Path.Memory);
                 }
             }
 
             return NTStatus.STATUS_SUCCESS;
         }
 
-        public NTStatus ReadFile(out byte[] data, object handle, long offset, int maxCount)
+        public NTStatus ReadFile(out IMemoryOwner<byte> data, object handle, long offset, int maxCount)
         {
             data = null;
-            FileHandle fileHandle = (FileHandle)handle;
-            string path = fileHandle.Path;
-            Stream stream = fileHandle.Stream;
+            var fileHandle = (FileHandle)handle;
+            var path = fileHandle.Path;
+            var stream = fileHandle.Stream;
             if (stream == null || !stream.CanRead)
             {
                 Log(Severity.Verbose, "ReadFile: Cannot read '{0}', Invalid Operation.", path);
@@ -388,37 +394,31 @@ namespace SMBLibrary
             try
             {
                 stream.Seek(offset, SeekOrigin.Begin);
-                data = new byte[maxCount];
-                bytesRead = stream.Read(data, 0, maxCount);
+                using var buf = Arrays.Rent(maxCount); 
+                bytesRead = stream.Read(buf.Memory.Span);
+                data = buf.Slice(0, bytesRead);
             }
             catch (Exception ex)
             {
                 if (ex is IOException || ex is UnauthorizedAccessException)
                 {
-                    NTStatus status = ToNTStatus(ex);
+                    var status = ToNTStatus(ex);
                     Log(Severity.Verbose, "ReadFile: Cannot read '{0}'. {1}.", path, status);
                     return status;
                 }
-                else
-                {
-                    throw;
-                }
+
+                throw;
             }
 
-            if (bytesRead < maxCount)
-            {
-                // EOF, we must trim the response data array
-                data = ByteReader.ReadBytes(data, 0, bytesRead);
-            }
             return NTStatus.STATUS_SUCCESS;
         }
 
-        public NTStatus WriteFile(out int numberOfBytesWritten, object handle, long offset, byte[] data)
+        public NTStatus WriteFile(out int numberOfBytesWritten, object handle, long offset, IMemoryOwner<byte> data)
         {
             numberOfBytesWritten = 0;
-            FileHandle fileHandle = (FileHandle)handle;
-            string path = fileHandle.Path;
-            Stream stream = fileHandle.Stream;
+            var fileHandle = (FileHandle)handle;
+            var path = fileHandle.Path;
+            var stream = fileHandle.Stream;
             if (stream == null || !stream.CanWrite)
             {
                 Log(Severity.Verbose, "WriteFile: Cannot write '{0}'. Invalid Operation.", path);
@@ -428,28 +428,26 @@ namespace SMBLibrary
             try
             {
                 stream.Seek(offset, SeekOrigin.Begin);
-                stream.Write(data, 0, data.Length);
+                stream.Write(data.Memory.Span);
             }
             catch (Exception ex)
             {
                 if (ex is IOException || ex is UnauthorizedAccessException)
                 {
-                    NTStatus status = ToNTStatus(ex);
+                    var status = ToNTStatus(ex);
                     Log(Severity.Verbose, "WriteFile: Cannot write '{0}'. {1}.", path, status);
                     return status;
                 }
-                else
-                {
-                    throw;
-                }
+
+                throw;
             }
-            numberOfBytesWritten = data.Length;
+            numberOfBytesWritten = data.Length();
             return NTStatus.STATUS_SUCCESS;
         }
 
         public NTStatus FlushFileBuffers(object handle)
         {
-            FileHandle fileHandle = (FileHandle)handle;
+            var fileHandle = (FileHandle)handle;
             if (fileHandle.Stream != null)
             {
                 fileHandle.Stream.Flush();
@@ -489,7 +487,7 @@ namespace SMBLibrary
             return NTStatus.STATUS_NOT_SUPPORTED;
         }
 
-        public NTStatus DeviceIOControl(object handle, uint ctlCode, byte[] input, out byte[] output, int maxOutputLength)
+        public NTStatus DeviceIOControl(object handle, uint ctlCode, IMemoryOwner<byte> input, out IMemoryOwner<byte> output, int maxOutputLength)
         {
             output = null;
             return NTStatus.STATUS_NOT_SUPPORTED;
@@ -498,7 +496,7 @@ namespace SMBLibrary
         public void Log(Severity severity, string message)
         {
             // To be thread-safe we must capture the delegate reference first
-            EventHandler<LogEntry> handler = LogEntryAdded;
+            var handler = LogEntryAdded;
             if (handler != null)
             {
                 handler(this, new LogEntry(DateTime.Now, severity, "NT FileSystem Adapter", message));
@@ -517,60 +515,65 @@ namespace SMBLibrary
             {
                 return NTStatus.STATUS_OBJECT_PATH_NOT_FOUND;
             }
-            else if (exception is FileNotFoundException)
+
+            if (exception is FileNotFoundException)
             {
                 return NTStatus.STATUS_OBJECT_PATH_NOT_FOUND;
             }
-            else if (exception is IOException)
+
+            if (exception is IOException)
             {
-                ushort errorCode = IOExceptionHelper.GetWin32ErrorCode((IOException)exception);
+                var errorCode = IOExceptionHelper.GetWin32ErrorCode((IOException)exception);
                 if (errorCode == (ushort)Win32Error.ERROR_SHARING_VIOLATION)
                 {
                     return NTStatus.STATUS_SHARING_VIOLATION;
                 }
-                else if (errorCode == (ushort)Win32Error.ERROR_DISK_FULL)
+
+                if (errorCode == (ushort)Win32Error.ERROR_DISK_FULL)
                 {
                     return NTStatus.STATUS_DISK_FULL;
                 }
-                else if (errorCode == (ushort)Win32Error.ERROR_INVALID_NAME)
+
+                if (errorCode == (ushort)Win32Error.ERROR_INVALID_NAME)
                 {
                     return NTStatus.STATUS_OBJECT_NAME_INVALID;
                 }
-                else if (errorCode == (ushort)Win32Error.ERROR_DIR_NOT_EMPTY)
+
+                if (errorCode == (ushort)Win32Error.ERROR_DIR_NOT_EMPTY)
                 {
                     // If a user tries to rename folder1 to folder2 when folder2 already exists, Windows 7 will offer to merge folder1 into folder2.
                     // In such case, Windows 7 will delete folder 1 and will expect STATUS_DIRECTORY_NOT_EMPTY if there are files to merge.
                     return NTStatus.STATUS_DIRECTORY_NOT_EMPTY;
                 }
-                else if (errorCode == (ushort)Win32Error.ERROR_BAD_PATHNAME)
+
+                if (errorCode == (ushort)Win32Error.ERROR_BAD_PATHNAME)
                 {
                     return NTStatus.STATUS_OBJECT_PATH_INVALID;
                 }
-                else if (errorCode == (ushort)Win32Error.ERROR_ALREADY_EXISTS)
+
+                if (errorCode == (ushort)Win32Error.ERROR_ALREADY_EXISTS)
                 {
                     // According to [MS-FSCC], FileRenameInformation MUST return STATUS_OBJECT_NAME_COLLISION when the specified name already exists and ReplaceIfExists is zero.
                     return NTStatus.STATUS_OBJECT_NAME_COLLISION;
                 }
-                else
-                {
-                    return NTStatus.STATUS_DATA_ERROR;
-                }
+
+                return NTStatus.STATUS_DATA_ERROR;
             }
-            else if (exception is UnauthorizedAccessException)
+
+            if (exception is UnauthorizedAccessException)
             {
                 return NTStatus.STATUS_ACCESS_DENIED;
             }
-            else
-            {
-                return NTStatus.STATUS_DATA_ERROR;
-            }
+
+            return NTStatus.STATUS_DATA_ERROR;
         }
 
         private static FileOptions ToFileOptions(CreateOptions createOptions)
         {
             const FileOptions FILE_FLAG_OPEN_REPARSE_POINT = (FileOptions)0x00200000;
             const FileOptions FILE_FLAG_NO_BUFFERING = (FileOptions)0x20000000;
-            FileOptions result = FileOptions.None;
+            
+            var result = FileOptions.None;
             if ((createOptions & CreateOptions.FILE_OPEN_REPARSE_POINT) > 0)
             {
                 result |= FILE_FLAG_OPEN_REPARSE_POINT;
@@ -601,7 +604,7 @@ namespace SMBLibrary
 
         private static string ToFileOptionsString(FileOptions options)
         {
-            string result = String.Empty;
+            var result = String.Empty;
             const FileOptions FILE_FLAG_OPEN_REPARSE_POINT = (FileOptions)0x00200000;
             const FileOptions FILE_FLAG_NO_BUFFERING = (FileOptions)0x20000000;
             if ((options & FILE_FLAG_OPEN_REPARSE_POINT) > 0)
@@ -619,7 +622,7 @@ namespace SMBLibrary
             {
                 result += options.ToString().Replace(", ", "|");
             }
-            result = result.TrimEnd(new char[] { '|' });
+            result = result.TrimEnd(new[] { '|' });
             return result;
         }
 

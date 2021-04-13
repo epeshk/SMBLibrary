@@ -4,9 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.IO;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -20,51 +22,58 @@ namespace SMBLibrary.SMB1
         public const int SupportedBufferFormat = 0x01;
         // Parameters:
         public ushort CountOfBytesReturned;
-        public byte[] Reserved; // 8 reserved bytes
+        public IMemoryOwner<byte> Reserved; // 8 reserved bytes
         // Data:
         public byte BufferFormat;
-        // ushort CountOfBytesRead;
-        public byte[] Bytes;
+        public IMemoryOwner<byte> Bytes;
 
-        public ReadResponse() : base()
+        public ReadResponse()
         {
-            Reserved = new byte[8];
+            CountOfBytesReturned = default;
+            Reserved = default; 
+            BufferFormat = default;
+            Reserved = Arrays.Rent(8);
         }
 
-        public ReadResponse(byte[] buffer, int offset) : base(buffer, offset, false)
+        public ReadResponse Init(Span<byte> buffer, int offset)
         {
-            CountOfBytesReturned = LittleEndianConverter.ToUInt16(this.SMBParameters, 0);
-            Reserved = ByteReader.ReadBytes(this.SMBParameters, 2, 8);
+            base.Init(buffer, offset, false);
+            
+            CountOfBytesReturned = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 0);
+            Reserved = ByteReader.ReadBytes_Rent(SmbParameters.Memory.Span, 2, 8);
 
-            BufferFormat = ByteReader.ReadByte(this.SMBData, 0);
+            BufferFormat = ByteReader.ReadByte(SmbData.Memory.Span, 0);
             if (BufferFormat != SupportedBufferFormat)
             {
                 throw new InvalidDataException("Unsupported Buffer Format");
             }
-            ushort CountOfBytesRead = LittleEndianConverter.ToUInt16(this.SMBData, 1);
-            Bytes = ByteReader.ReadBytes(this.SMBData, 3, CountOfBytesRead);
+            var countOfBytesRead = LittleEndianConverter.ToUInt16(SmbData.Memory.Span, 1);
+            Bytes = ByteReader.ReadBytes_Rent(SmbData.Memory.Span, 3, countOfBytesRead);
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            this.SMBParameters = new byte[ParametersLength];
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 0, CountOfBytesReturned);
-            ByteWriter.WriteBytes(this.SMBParameters, 2, Reserved, 8);
+            SmbParameters = Arrays.Rent(ParametersLength);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 0, CountOfBytesReturned);
+            BufferWriter.WriteBytes(SmbParameters.Memory.Span, 2, Reserved.Memory.Span, 8);
 
-            this.SMBData = new byte[3 + Bytes.Length];
-            ByteWriter.WriteByte(this.SMBData, 0, BufferFormat);
-            LittleEndianWriter.WriteUInt16(this.SMBData, 1, (ushort)Bytes.Length);
-            ByteWriter.WriteBytes(this.SMBData, 3, Bytes);
+            SmbData = Arrays.Rent(3 + Bytes.Length());
+            BufferWriter.WriteByte(SmbData.Memory.Span, 0, BufferFormat);
+            LittleEndianWriter.WriteUInt16(SmbData.Memory.Span, 1, (ushort)Bytes.Length());
+            BufferWriter.WriteBytes(SmbData.Memory.Span, 3, Bytes.Memory.Span);
 
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
+        public override CommandName CommandName => CommandName.SMB_COM_READ;
+
+        public override void Dispose()
         {
-            get
-            {
-                return CommandName.SMB_COM_READ;
-            }
+            base.Dispose();
+            Bytes?.Dispose(); Bytes = null;
+            Reserved?.Dispose(); Reserved = null;
         }
     }
 }

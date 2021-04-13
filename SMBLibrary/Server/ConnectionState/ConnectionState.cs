@@ -4,10 +4,12 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using MemoryPools.Memory;
 using SMBLibrary.Authentication.GSSAPI;
 using SMBLibrary.NetBios;
 using Utilities;
@@ -16,12 +18,12 @@ namespace SMBLibrary.Server
 {
     internal delegate void LogDelegate(Severity severity, string message);
 
-    internal class ConnectionState
+    internal class ConnectionState : IDisposable
     {
         private Socket m_clientSocket;
         private IPEndPoint m_clientEndPoint;
-        private NBTConnectionReceiveBuffer m_receiveBuffer;
-        private BlockingQueue<SessionPacket> m_sendQueue;
+        private ConnectionReceiveBuffer m_receiveBuffer;
+        private BlockingQueue<SessionPacketBase> m_sendQueue;
         private DateTime m_creationDT;
         private DateTime m_lastReceiveDT;
         private Reference<DateTime> m_lastSendDTRef; // We must use a reference because the sender thread will keep using the original ConnectionState object
@@ -33,8 +35,8 @@ namespace SMBLibrary.Server
         {
             m_clientSocket = clientSocket;
             m_clientEndPoint = clientEndPoint;
-            m_receiveBuffer = new NBTConnectionReceiveBuffer();
-            m_sendQueue = new BlockingQueue<SessionPacket>();
+            m_receiveBuffer = ObjectsPool<ConnectionReceiveBuffer>.Get().Init();
+            m_sendQueue = new BlockingQueue<SessionPacketBase>();
             m_creationDT = DateTime.UtcNow;
             m_lastReceiveDT = DateTime.UtcNow;
             m_lastSendDTRef = DateTime.UtcNow;
@@ -76,74 +78,26 @@ namespace SMBLibrary.Server
             }
         }
 
-        public void LogToServer(Severity severity, string message, params object[] args)
+        public void LogToServer(Severity severity, ReadOnlySpan<char> message, params object[] args)
         {
-            LogToServer(severity, String.Format(message, args));
+            LogToServer(severity, string.Format(message.ToString(), args));
         }
 
-        public Socket ClientSocket
-        {
-            get
-            {
-                return m_clientSocket;
-            }
-        }
+        public Socket ClientSocket => m_clientSocket;
 
-        public IPEndPoint ClientEndPoint
-        {
-            get
-            {
-                return m_clientEndPoint;
-            }
-        }
+        public IPEndPoint ClientEndPoint => m_clientEndPoint;
 
-        public NBTConnectionReceiveBuffer ReceiveBuffer
-        {
-            get
-            {
-                return m_receiveBuffer;
-            }
-        }
+        public ConnectionReceiveBuffer ReceiveBuffer => m_receiveBuffer;
 
-        public BlockingQueue<SessionPacket> SendQueue
-        {
-            get
-            {
-                return m_sendQueue;
-            }
-        }
+        public BlockingQueue<SessionPacketBase> SendQueue => m_sendQueue;
 
-        public DateTime CreationDT
-        {
-            get
-            {
-                return m_creationDT;
-            }
-        }
+        public DateTime CreationDT => m_creationDT;
 
-        public DateTime LastReceiveDT
-        {
-            get
-            {
-                return m_lastReceiveDT;
-            }
-        }
+        public DateTime LastReceiveDT => m_lastReceiveDT;
 
-        public DateTime LastSendDT
-        {
-            get
-            {
-                return LastSendDTRef.Value;
-            }
-        }
+        public DateTime LastSendDT => LastSendDTRef.Value;
 
-        internal Reference<DateTime> LastSendDTRef
-        {
-            get
-            {
-                return m_lastSendDTRef;
-            }
-        }
+        internal Reference<DateTime> LastSendDTRef => m_lastSendDTRef;
 
         public void UpdateLastReceiveDT()
         {
@@ -165,6 +119,12 @@ namespace SMBLibrary.Server
                 }
                 return String.Empty;
             }
+        }
+
+        public void Dispose()
+        {
+            m_clientSocket?.Dispose();
+            m_receiveBuffer?.Dispose();
         }
     }
 }

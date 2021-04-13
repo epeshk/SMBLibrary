@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary
@@ -27,43 +28,32 @@ namespace SMBLibrary
         // 3 reserved bytes
         public uint RootDirectory;
         private uint FileNameLength;
-        public string FileName = String.Empty;
+        public IMemoryOwner<char> FileName = MemoryOwner<char>.Empty;
 
         public FileLinkInformationType1()
         {
         }
 
-        public FileLinkInformationType1(byte[] buffer, int offset)
+        public FileLinkInformationType1(Span<byte> buffer, int offset)
         {
             ReplaceIfExists = Conversion.ToBoolean(ByteReader.ReadByte(buffer, offset + 0));
             RootDirectory = LittleEndianConverter.ToUInt32(buffer, offset + 4);
             FileNameLength = LittleEndianConverter.ToUInt32(buffer, offset + 8);
-            FileName = ByteReader.ReadUTF16String(buffer, offset + 12, (int)FileNameLength / 2);
+            FileName = Arrays.Rent<char>((int) FileNameLength / 2);
+            ByteReader.ReadUTF16String(FileName.Memory.Span, buffer, offset + 12, (int)FileNameLength / 2);
         }
 
-        public override void WriteBytes(byte[] buffer, int offset)
+        public override void WriteBytes(Span<byte> buffer, int offset)
         {
-            FileNameLength = (uint)(FileName.Length * 2);
-            ByteWriter.WriteByte(buffer, offset + 0, Convert.ToByte(ReplaceIfExists));
+            FileNameLength = (uint)(FileName.Memory.Length * 2);
+            BufferWriter.WriteByte(buffer, offset + 0, Convert.ToByte(ReplaceIfExists));
             LittleEndianWriter.WriteUInt32(buffer, offset + 4, RootDirectory);
             LittleEndianWriter.WriteUInt32(buffer, offset + 8, FileNameLength);
-            ByteWriter.WriteUTF16String(buffer, offset + 12, FileName);
+            BufferWriter.WriteUTF16String(buffer, offset + 12, FileName.Memory.Span);
         }
 
-        public override FileInformationClass FileInformationClass
-        {
-            get
-            {
-                return FileInformationClass.FileLinkInformation;
-            }
-        }
+        public override FileInformationClass FileInformationClass => FileInformationClass.FileLinkInformation;
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength + FileName.Length * 2;
-            }
-        }
+        public override int Length => FixedLength + FileName.Memory.Length * 2;
     }
 }

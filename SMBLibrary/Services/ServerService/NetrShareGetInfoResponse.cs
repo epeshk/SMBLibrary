@@ -4,11 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using System.Text;
+
+using System.Buffers;
 using SMBLibrary.RPC;
-using Utilities;
 
 namespace SMBLibrary.Services
 {
@@ -24,19 +22,18 @@ namespace SMBLibrary.Services
         {
         }
 
-        public NetrShareGetInfoResponse(byte[] buffer)
+        public NetrShareGetInfoResponse(IMemoryOwner<byte> buffer)
         {
-            NDRParser parser = new NDRParser(buffer);
+            var parser = new NDRParser(buffer);
             InfoStruct = new ShareInfo(parser);
             Result = (Win32Error)parser.ReadUInt32();
         }
 
-        public byte[] GetBytes()
+        public IMemoryOwner<byte> GetBytes()
         {
-            NDRWriter writer = new NDRWriter();
+            var writer = new NDRWriter();
             writer.WriteStructure(InfoStruct);
             writer.WriteUInt32((uint)Result);
-
             return writer.GetBytes();
         }
     }

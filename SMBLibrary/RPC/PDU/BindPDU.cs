@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.RPC
@@ -22,16 +23,16 @@ namespace SMBLibrary.RPC
         public ushort MaxReceiveFragmentSize; // max_recv_frag
         public uint AssociationGroupID; // assoc_group_id
         public ContextList ContextList;
-        public byte[] AuthVerifier;
+        public IMemoryOwner<byte> AuthVerifier;
 
-        public BindPDU() : base()
+        public BindPDU()
         {
             PacketType = PacketTypeName.Bind;
             ContextList = new ContextList();
-            AuthVerifier = new byte[0];
+            AuthVerifier = MemoryOwner<byte>.Empty;
         }
 
-        public BindPDU(byte[] buffer, int offset) : base(buffer, offset)
+        public BindPDU(Span<byte> buffer, int offset) : base(buffer, offset)
         {
             offset += CommonFieldsLength;
             MaxTransmitFragmentSize = LittleEndianReader.ReadUInt16(buffer, ref offset);
@@ -39,30 +40,31 @@ namespace SMBLibrary.RPC
             AssociationGroupID = LittleEndianReader.ReadUInt32(buffer, ref offset);
             ContextList = new ContextList(buffer, offset);
             offset += ContextList.Length;
-            AuthVerifier = ByteReader.ReadBytes(buffer, offset, AuthLength);
+            AuthVerifier = Arrays.RentFrom<byte>(buffer.Slice(offset, AuthLength));
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            AuthLength =(ushort)AuthVerifier.Length;
-            byte[] buffer = new byte[Length];
-            WriteCommonFieldsBytes(buffer);
-            int offset = CommonFieldsLength;
-            LittleEndianWriter.WriteUInt16(buffer, ref offset, MaxTransmitFragmentSize);
-            LittleEndianWriter.WriteUInt16(buffer, ref offset, MaxReceiveFragmentSize);
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, AssociationGroupID);
-            ContextList.WriteBytes(buffer, ref offset);
-            ByteWriter.WriteBytes(buffer, offset, AuthVerifier);
+            AuthLength = (ushort)AuthVerifier.Length();
+            var buffer = Arrays.Rent<byte>(Length);
+            WriteCommonFieldsBytes(buffer.Memory.Span);
+            var offset = CommonFieldsLength;
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, ref offset, MaxTransmitFragmentSize);
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, ref offset, MaxReceiveFragmentSize);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, AssociationGroupID);
+            ContextList.WriteBytes(buffer.Memory.Span, ref offset);
+            BufferWriter.WriteBytes(buffer.Memory.Span, offset, AuthVerifier.Memory.Span);
 
             return buffer;
         }
 
-        public override int Length
+        public override int Length => CommonFieldsLength + BindFieldsFixedLength + ContextList.Length + AuthLength;
+
+        public override void Dispose()
         {
-            get
-            {
-                return CommonFieldsLength + BindFieldsFixedLength + ContextList.Length + AuthLength;
-            }
+            base.Dispose();
+            AuthVerifier.Dispose();
+            AuthVerifier = null;
         }
     }
 }

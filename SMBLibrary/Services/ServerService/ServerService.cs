@@ -4,10 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Text;
-using Utilities;
 
 namespace SMBLibrary.Services
 {
@@ -41,26 +41,26 @@ namespace SMBLibrary.Services
             m_shares = shares;
         }
 
-        public override byte[] GetResponseBytes(ushort opNum, byte[] requestBytes)
+        public override IMemoryOwner<byte> GetResponseBytes(ushort opNum, IMemoryOwner<byte> requestBytes)
         {
             switch ((ServerServiceOpName)opNum)
             {
                 case ServerServiceOpName.NetrShareEnum:
                     {
-                        NetrShareEnumRequest request = new NetrShareEnumRequest(requestBytes);
-                        NetrShareEnumResponse response = GetNetrShareEnumResponse(request);
+                        var request = new NetrShareEnumRequest(requestBytes);
+                        var response = GetNetrShareEnumResponse(request);
                         return response.GetBytes();
                     }
                 case ServerServiceOpName.NetrShareGetInfo:
                     {
-                        NetrShareGetInfoRequest request = new NetrShareGetInfoRequest(requestBytes);
-                        NetrShareGetInfoResponse response = GetNetrShareGetInfoResponse(request);
+                        var request = new NetrShareGetInfoRequest(requestBytes);
+                        var response = GetNetrShareGetInfoResponse(request);
                         return response.GetBytes();
                     }
                 case ServerServiceOpName.NetrServerGetInfo:
                     {
-                        NetrServerGetInfoRequest request = new NetrServerGetInfoRequest(requestBytes);
-                        NetrServerGetInfoResponse response = GetNetrWkstaGetInfoResponse(request);
+                        var request = new NetrServerGetInfoRequest(requestBytes);
+                        var response = GetNetrWkstaGetInfoResponse(request);
                         return response.GetBytes();
                     }
                 default:
@@ -70,17 +70,19 @@ namespace SMBLibrary.Services
 
         public NetrShareEnumResponse GetNetrShareEnumResponse(NetrShareEnumRequest request)
         {
-            NetrShareEnumResponse response = new NetrShareEnumResponse();
+            var response = new NetrShareEnumResponse();
             switch (request.InfoStruct.Level)
             {
                 case 0:
                     {
                         // We ignore request.PreferedMaximumLength
-                        ShareInfo0Container info = new ShareInfo0Container();
-                        foreach (string shareName in m_shares)
+                        var info = new ShareInfo0Container();
+                        for (var index = 0; index < m_shares.Count; index++)
                         {
+                            var shareName = m_shares[index];
                             info.Add(new ShareInfo0Entry(shareName));
                         }
+
                         response.InfoStruct = new ShareEnum(info);
                         response.TotalEntries = (uint)m_shares.Count;
                         response.Result = Win32Error.ERROR_SUCCESS;
@@ -89,11 +91,13 @@ namespace SMBLibrary.Services
                 case 1:
                     {
                         // We ignore request.PreferedMaximumLength
-                        ShareInfo1Container info = new ShareInfo1Container();
-                        foreach (string shareName in m_shares)
+                        var info = new ShareInfo1Container();
+                        for (var index = 0; index < m_shares.Count; index++)
                         {
+                            var shareName = m_shares[index];
                             info.Add(new ShareInfo1Entry(shareName, new ShareTypeExtended(ShareType.DiskDrive)));
                         }
+
                         response.InfoStruct = new ShareEnum(info);
                         response.TotalEntries = (uint)m_shares.Count;
                         response.Result = Win32Error.ERROR_SUCCESS;
@@ -119,9 +123,9 @@ namespace SMBLibrary.Services
 
         public NetrShareGetInfoResponse GetNetrShareGetInfoResponse(NetrShareGetInfoRequest request)
         {
-            int shareIndex = IndexOfShare(request.NetName);
+            var shareIndex = IndexOfShare(request.NetName);
             
-            NetrShareGetInfoResponse response = new NetrShareGetInfoResponse();
+            var response = new NetrShareGetInfoResponse();
             if (shareIndex == -1)
             {
                 response.InfoStruct = new ShareInfo(request.Level);
@@ -133,21 +137,21 @@ namespace SMBLibrary.Services
             {
                 case 0:
                     {
-                        ShareInfo0Entry info = new ShareInfo0Entry(m_shares[shareIndex]);
+                        var info = new ShareInfo0Entry(m_shares[shareIndex]);
                         response.InfoStruct = new ShareInfo(info);
                         response.Result = Win32Error.ERROR_SUCCESS;
                         return response;
                     }
                 case 1:
                     {
-                        ShareInfo1Entry info = new ShareInfo1Entry(m_shares[shareIndex], new ShareTypeExtended(ShareType.DiskDrive));
+                        var info = new ShareInfo1Entry(m_shares[shareIndex], new ShareTypeExtended(ShareType.DiskDrive));
                         response.InfoStruct = new ShareInfo(info);
                         response.Result = Win32Error.ERROR_SUCCESS;
                         return response;
                     }
                 case 2:
                     {
-                        ShareInfo2Entry info = new ShareInfo2Entry(m_shares[shareIndex], new ShareTypeExtended(ShareType.DiskDrive));
+                        var info = new ShareInfo2Entry(m_shares[shareIndex], new ShareTypeExtended(ShareType.DiskDrive));
                         response.InfoStruct = new ShareInfo(info);
                         response.Result = Win32Error.ERROR_SUCCESS;
                         return response;
@@ -172,12 +176,12 @@ namespace SMBLibrary.Services
 
         public NetrServerGetInfoResponse GetNetrWkstaGetInfoResponse(NetrServerGetInfoRequest request)
         {
-            NetrServerGetInfoResponse response = new NetrServerGetInfoResponse();
+            var response = new NetrServerGetInfoResponse();
             switch (request.Level)
             {
                 case 100:
                     {
-                        ServerInfo100 info = new ServerInfo100();
+                        var info = new ServerInfo100();
                         info.PlatformID = m_platformID;
                         info.ServerName.Value = m_serverName;
                         response.InfoStruct = new ServerInfo(info);
@@ -186,7 +190,7 @@ namespace SMBLibrary.Services
                     }
                 case 101:
                     {
-                        ServerInfo101 info = new ServerInfo101();
+                        var info = new ServerInfo101();
                         info.PlatformID = m_platformID;
                         info.ServerName.Value = m_serverName;
                         info.VerMajor = m_verMajor;
@@ -217,7 +221,7 @@ namespace SMBLibrary.Services
 
         private int IndexOfShare(string shareName)
         {
-            for (int index = 0; index < m_shares.Count; index++)
+            for (var index = 0; index < m_shares.Count; index++)
             {
                 if (m_shares[index].Equals(shareName, StringComparison.OrdinalIgnoreCase))
                 {
@@ -228,20 +232,8 @@ namespace SMBLibrary.Services
             return -1;
         }
 
-        public override Guid InterfaceGuid
-        {
-            get
-            {
-                return ServiceInterfaceGuid;
-            }
-        }
+        public override Guid InterfaceGuid => ServiceInterfaceGuid;
 
-        public override string PipeName
-        {
-            get
-            {
-                return ServicePipeName;
-            }
-        }
+        public override string PipeName => ServicePipeName;
     }
 }

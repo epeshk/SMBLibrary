@@ -4,8 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using Utilities;
 
 namespace SMBLibrary
@@ -24,32 +24,20 @@ namespace SMBLibrary
         {
         }
 
-        public FileFsDeviceInformation(byte[] buffer, int offset)
+        public FileFsDeviceInformation(Span<byte> buffer, int offset)
         {
             DeviceType = (DeviceType)LittleEndianConverter.ToUInt32(buffer, offset + 0);
             Characteristics = (DeviceCharacteristics)LittleEndianConverter.ToUInt32(buffer, offset + 4);
         }
 
-        public override void WriteBytes(byte[] buffer, int offset)
+        public override void WriteBytes(Span<byte> buffer, int offset)
         {
             LittleEndianWriter.WriteUInt32(buffer, offset + 0, (uint)DeviceType);
             LittleEndianWriter.WriteUInt32(buffer, offset + 4, (uint)Characteristics);
         }
 
-        public override FileSystemInformationClass FileSystemInformationClass
-        {
-            get
-            {
-                return FileSystemInformationClass.FileFsDeviceInformation;
-            }
-        }
+        public override FileSystemInformationClass FileSystemInformationClass => FileSystemInformationClass.FileFsDeviceInformation;
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength;
-            }
-        }
+        public override int Length => FixedLength;
     }
 }

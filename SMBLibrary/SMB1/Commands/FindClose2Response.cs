@@ -1,7 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Text;
-using Utilities;
 
 namespace SMBLibrary.SMB1
 {
@@ -10,20 +7,20 @@ namespace SMBLibrary.SMB1
     /// </summary>
     public class FindClose2Response : SMB1Command
     {
-        public FindClose2Response() : base()
+        public override SMB1Command Init()
         {
+            base.Init();
+
+            return this;
         }
 
-        public FindClose2Response(byte[] buffer, int offset) : base(buffer, offset, false)
+        public FindClose2Response Init(Span<byte> buffer, int offset)
         {
+            base.Init(buffer, offset, false);
+
+            return this;
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_FIND_CLOSE2;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_FIND_CLOSE2;
     }
 }

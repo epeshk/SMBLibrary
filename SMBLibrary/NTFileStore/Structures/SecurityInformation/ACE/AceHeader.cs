@@ -4,8 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using Utilities;
 
 namespace SMBLibrary
@@ -25,17 +25,17 @@ namespace SMBLibrary
         {
         }
 
-        public AceHeader(byte[] buffer, int offset)
+        public AceHeader(Span<byte> buffer, int offset)
         {
             AceType = (AceType)ByteReader.ReadByte(buffer, offset + 0);
             AceFlags = (AceFlags)ByteReader.ReadByte(buffer, offset + 1);
             AceSize = LittleEndianConverter.ToUInt16(buffer, offset + 2);
         }
 
-        public void WriteBytes(byte[] buffer, ref int offset)
+        public void WriteBytes(Span<byte> buffer, ref int offset)
         {
-            ByteWriter.WriteByte(buffer, ref offset, (byte)AceType);
-            ByteWriter.WriteByte(buffer, ref offset, (byte)AceFlags);
+            BufferWriter.WriteByte(buffer, ref offset, (byte)AceType);
+            BufferWriter.WriteByte(buffer, ref offset, (byte)AceFlags);
             LittleEndianWriter.WriteUInt16(buffer, ref offset, AceSize);
         }
     }

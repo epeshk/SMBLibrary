@@ -4,6 +4,7 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 
 namespace SMBLibrary.RPC
@@ -42,14 +43,14 @@ namespace SMBLibrary.RPC
             FloatingPointRepresentation = floatingPointRepresentation;
         }
 
-        public DataRepresentationFormat(byte[] buffer, int offset)
+        public DataRepresentationFormat(Span<byte> buffer, int offset)
         {
             CharacterFormat = (CharacterFormat)(buffer[offset + 0] & 0x0F);
             ByteOrder = (ByteOrder)(buffer[offset + 0] >> 4);
             FloatingPointRepresentation = (FloatingPointRepresentation)(buffer[offset + 1]);
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
             buffer[offset + 0] = (byte)CharacterFormat;
             buffer[offset + 0] |= (byte)((byte)ByteOrder << 4);

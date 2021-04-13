@@ -4,6 +4,7 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -15,7 +16,7 @@ namespace SMBLibrary.Authentication.NTLM
     {
         public static KeyValuePairList<AVPairKey, byte[]> GetAVPairSequence(string domainName, string computerName)
         {
-            KeyValuePairList<AVPairKey, byte[]> pairs = new KeyValuePairList<AVPairKey, byte[]>();
+            var pairs = new KeyValuePairList<AVPairKey, byte[]>();
             pairs.Add(AVPairKey.NbDomainName, UnicodeEncoding.Unicode.GetBytes(domainName));
             pairs.Add(AVPairKey.NbComputerName, UnicodeEncoding.Unicode.GetBytes(computerName));
             return pairs;
@@ -23,47 +24,51 @@ namespace SMBLibrary.Authentication.NTLM
 
         public static byte[] GetAVPairSequenceBytes(KeyValuePairList<AVPairKey, byte[]> pairs)
         {
-            int length = GetAVPairSequenceLength(pairs);
-            byte[] result = new byte[length];
-            int offset = 0;
+            var length = GetAVPairSequenceLength(pairs);
+            var result = new byte[length];
+            var offset = 0;
             WriteAVPairSequence(result, ref offset, pairs);
             return result;
         }
 
 		public static int GetAVPairSequenceLength(KeyValuePairList<AVPairKey, byte[]> pairs)
 		{
-			int length = 0;
-            foreach (KeyValuePair<AVPairKey, byte[]> pair in pairs)
+			var length = 0;
+            for (var index = 0; index < pairs.Count; index++)
             {
+                var pair = pairs[index];
                 length += 4 + pair.Value.Length;
             }
-			return length + 4;
+
+            return length + 4;
 		}
 
-		public static void WriteAVPairSequence(byte[] buffer, ref int offset, KeyValuePairList<AVPairKey, byte[]> pairs)
+		public static void WriteAVPairSequence(Span<byte> buffer, ref int offset, KeyValuePairList<AVPairKey, byte[]> pairs)
 		{
-			foreach (KeyValuePair<AVPairKey, byte[]> pair in pairs)
+            for (var index = 0; index < pairs.Count; index++)
             {
+                var pair = pairs[index];
                 WriteAVPair(buffer, ref offset, pair.Key, pair.Value);
             }
+
             LittleEndianWriter.WriteUInt16(buffer, ref offset, (ushort)AVPairKey.EOL);
             LittleEndianWriter.WriteUInt16(buffer, ref offset, 0);
 		}
 
-        private static void WriteAVPair(byte[] buffer, ref int offset, AVPairKey key, byte[] value)
+        private static void WriteAVPair(Span<byte> buffer, ref int offset, AVPairKey key, byte[] value)
         {
             LittleEndianWriter.WriteUInt16(buffer, ref offset, (ushort)key);
             LittleEndianWriter.WriteUInt16(buffer, ref offset, (ushort)value.Length);
-            ByteWriter.WriteBytes(buffer, ref offset, value);
+            BufferWriter.WriteBytes(buffer, ref offset, value);
         }
 
-        public static KeyValuePairList<AVPairKey, byte[]> ReadAVPairSequence(byte[] buffer, int offset)
+        public static KeyValuePairList<AVPairKey, byte[]> ReadAVPairSequence(Span<byte> buffer, int offset)
         {
-            KeyValuePairList<AVPairKey, byte[]> result = new KeyValuePairList<AVPairKey,byte[]>();
-            AVPairKey key = (AVPairKey)LittleEndianConverter.ToUInt16(buffer, offset);
+            var result = new KeyValuePairList<AVPairKey,byte[]>();
+            var key = (AVPairKey)LittleEndianConverter.ToUInt16(buffer, offset);
             while (key != AVPairKey.EOL)
             {
-                KeyValuePair<AVPairKey, byte[]> pair = ReadAVPair(buffer, ref offset);
+                var pair = ReadAVPair(buffer, ref offset);
                 result.Add(pair);
                 key = (AVPairKey)LittleEndianConverter.ToUInt16(buffer, offset);
             }
@@ -71,11 +76,11 @@ namespace SMBLibrary.Authentication.NTLM
             return result;
         }
 
-        private static KeyValuePair<AVPairKey, byte[]> ReadAVPair(byte[] buffer, ref int offset)
+        private static KeyValuePair<AVPairKey, byte[]> ReadAVPair(Span<byte> buffer, ref int offset)
         {
-            AVPairKey key = (AVPairKey)LittleEndianReader.ReadUInt16(buffer, ref offset);
-            ushort length = LittleEndianReader.ReadUInt16(buffer, ref offset);
-            byte[] value = ByteReader.ReadBytes(buffer, ref offset, length);
+            var key = (AVPairKey)LittleEndianReader.ReadUInt16(buffer, ref offset);
+            var length = LittleEndianReader.ReadUInt16(buffer, ref offset);
+            var value = ByteReader.ReadBytes_RentArray(buffer, ref offset, length);
             return new KeyValuePair<AVPairKey, byte[]>(key, value);
         }
     }

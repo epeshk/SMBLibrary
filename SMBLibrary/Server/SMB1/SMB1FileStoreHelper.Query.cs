@@ -4,11 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using System.Text;
+
+using MemoryPools.Memory;
 using SMBLibrary.SMB1;
-using Utilities;
 
 namespace SMBLibrary.Server.SMB1
 {
@@ -18,13 +16,13 @@ namespace SMBLibrary.Server.SMB1
         {
             object handle;
             FileStatus fileStatus;
-            NTStatus openStatus = fileStore.CreateFile(out handle, out fileStatus, path, (AccessMask)FileAccessMask.FILE_READ_ATTRIBUTES, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, 0, securityContext);
+            var openStatus = fileStore.CreateFile(out handle, out fileStatus, Arrays.RentFrom<char>(path), (AccessMask)FileAccessMask.FILE_READ_ATTRIBUTES, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, 0, securityContext);
             if (openStatus != NTStatus.STATUS_SUCCESS)
             {
                 result = null;
                 return openStatus;
             }
-            NTStatus returnStatus = GetFileInformation(out result, fileStore, handle, informationLevel);
+            var returnStatus = GetFileInformation(out result, fileStore, handle, informationLevel);
             fileStore.CloseFile(handle);
             return returnStatus;
         }
@@ -33,13 +31,13 @@ namespace SMBLibrary.Server.SMB1
         {
             object handle;
             FileStatus fileStatus;
-            NTStatus openStatus = fileStore.CreateFile(out handle, out fileStatus, path, (AccessMask)FileAccessMask.FILE_READ_ATTRIBUTES, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, 0, securityContext);
+            var openStatus = fileStore.CreateFile(out handle, out fileStatus, Arrays.RentFrom<char>(path), (AccessMask)FileAccessMask.FILE_READ_ATTRIBUTES, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, 0, securityContext);
             if (openStatus != NTStatus.STATUS_SUCCESS)
             {
                 result = null;
                 return openStatus;
             }
-            NTStatus returnStatus = fileStore.GetFileInformation(out result, handle, informationClass);
+            var returnStatus = fileStore.GetFileInformation(out result, handle, informationClass);
             fileStore.CloseFile(handle);
             return returnStatus;
         }
@@ -58,7 +56,7 @@ namespace SMBLibrary.Server.SMB1
             }
 
             FileInformation fileInformation;
-            NTStatus status = fileStore.GetFileInformation(out fileInformation, handle, informationClass);
+            var status = fileStore.GetFileInformation(out fileInformation, handle, informationClass);
             if (status != NTStatus.STATUS_SUCCESS)
             {
                 return status;

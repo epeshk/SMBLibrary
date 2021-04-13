@@ -4,10 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.NetBios
@@ -34,17 +33,17 @@ namespace SMBLibrary.NetBios
             Statistics = new NodeStatistics();
         }
 
-        public NodeStatusResponse(byte[] buffer, int offset)
+        public NodeStatusResponse(Span<byte> buffer, int offset)
         {
             Header = new NameServicePacketHeader(buffer, ref offset);
             Resource = new ResourceRecord(buffer, ref offset);
 
-            int position = 0;
-            byte numberOfNames = ByteReader.ReadByte(Resource.Data, ref position);
-            for (int index = 0; index < numberOfNames; index++)
+            var position = 0;
+            var numberOfNames = ByteReader.ReadByte(Resource.Data, ref position);
+            for (var index = 0; index < numberOfNames; index++)
             {
-                string name = ByteReader.ReadAnsiString(Resource.Data, ref position, 16);
-                NameFlags nameFlags = (NameFlags)BigEndianReader.ReadUInt16(Resource.Data, ref position);
+                var name = ByteReader.ReadAnsiString(Resource.Data, ref position, 16);
+                var nameFlags = (NameFlags)BigEndianReader.ReadUInt16(Resource.Data, ref position);
                 Names.Add(name, nameFlags);
             }
             Statistics = new NodeStatistics(Resource.Data, ref position);
@@ -54,7 +53,7 @@ namespace SMBLibrary.NetBios
         {
             Resource.Data = GetData();
 
-            MemoryStream stream = new MemoryStream();
+            var stream = new MemoryStream();
             Header.WriteBytes(stream);
             Resource.WriteBytes(stream);
             return stream.ToArray();
@@ -62,15 +61,16 @@ namespace SMBLibrary.NetBios
 
         private byte[] GetData()
         {
-            MemoryStream stream = new MemoryStream();
+            var stream = new MemoryStream();
             stream.WriteByte((byte)Names.Count);
-            foreach (KeyValuePair<string, NameFlags> entry in Names)
+            for (var index = 0; index < Names.Count; index++)
             {
-                ByteWriter.WriteAnsiString(stream, entry.Key);
-                BigEndianWriter.WriteUInt16(stream, (ushort)entry.Value);
+                var entry = Names[index];
+                BufferWriter.WriteAnsiString(stream, entry.Key);
+                BigEndianWriter.WriteUInt16(stream, (ushort) entry.Value);
             }
 
-            ByteWriter.WriteBytes(stream, Statistics.GetBytes());
+            BufferWriter.WriteBytes(stream, Statistics.GetBytes());
 
             return stream.ToArray();
         }

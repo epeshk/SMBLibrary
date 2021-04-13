@@ -4,10 +4,6 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using System.Text;
-using Utilities;
 
 namespace SMBLibrary.SMB1
 {
@@ -17,19 +13,14 @@ namespace SMBLibrary.SMB1
     /// </summary>
     public class ErrorResponse : SMB1Command
     {
-        private CommandName m_commandName;
+        private CommandName _commandName;
 
-        public ErrorResponse(CommandName commandName) : base()
+        public ErrorResponse Init(CommandName commandName)
         {
-            m_commandName = commandName;
+            _commandName = commandName;
+            return this;
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return m_commandName;
-            }
-        }
+        public override CommandName CommandName => _commandName;
     }
 }

@@ -4,8 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using Utilities;
 
 namespace SMBLibrary
@@ -28,40 +28,28 @@ namespace SMBLibrary
         {
         }
 
-        public FileCompressionInformation(byte[] buffer, int offset)
+        public FileCompressionInformation(Span<byte> buffer, int offset)
         {
             CompressedFileSize = LittleEndianConverter.ToInt64(buffer, offset + 0);
             CompressionFormat = (CompressionFormat)LittleEndianConverter.ToUInt16(buffer, offset + 8);
             CompressionUnitShift = ByteReader.ReadByte(buffer, offset + 10);
             ChunkShift = ByteReader.ReadByte(buffer, offset + 11);
             ClusterShift = ByteReader.ReadByte(buffer, offset + 12);
-            Reserved = ByteReader.ReadBytes(buffer, offset + 13, 3);
+            Reserved = ByteReader.ReadBytes_RentArray(buffer, offset + 13, 3);
         }
 
-        public override void WriteBytes(byte[] buffer, int offset)
+        public override void WriteBytes(Span<byte> buffer, int offset)
         {
             LittleEndianWriter.WriteInt64(buffer, offset + 0, CompressedFileSize);
             LittleEndianWriter.WriteUInt16(buffer, offset + 8, (ushort)CompressionFormat);
-            ByteWriter.WriteByte(buffer, offset + 10, CompressionUnitShift);
-            ByteWriter.WriteByte(buffer, offset + 11, ChunkShift);
-            ByteWriter.WriteByte(buffer, offset + 12, ClusterShift);
-            ByteWriter.WriteBytes(buffer, offset + 13, Reserved, 3);
+            BufferWriter.WriteByte(buffer, offset + 10, CompressionUnitShift);
+            BufferWriter.WriteByte(buffer, offset + 11, ChunkShift);
+            BufferWriter.WriteByte(buffer, offset + 12, ClusterShift);
+            BufferWriter.WriteBytes(buffer, offset + 13, Reserved, 3);
         }
 
-        public override FileInformationClass FileInformationClass
-        {
-            get
-            {
-                return FileInformationClass.FileCompressionInformation;
-            }
-        }
+        public override FileInformationClass FileInformationClass => FileInformationClass.FileCompressionInformation;
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength;
-            }
-        }
+        public override int Length => FixedLength;
     }
 }

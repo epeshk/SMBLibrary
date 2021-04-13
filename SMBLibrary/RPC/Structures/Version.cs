@@ -4,9 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.RPC
@@ -21,16 +20,16 @@ namespace SMBLibrary.RPC
         public byte Major; // major
         public byte Minor; // minor
 
-        public Version(byte[] buffer, int offset)
+        public Version(Span<byte> buffer, int offset)
         {
             Major = ByteReader.ReadByte(buffer, offset + 0);
             Minor = ByteReader.ReadByte(buffer, offset + 1);
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
-            ByteWriter.WriteByte(buffer, offset + 0, Major);
-            ByteWriter.WriteByte(buffer, offset + 1, Minor);
+            BufferWriter.WriteByte(buffer, offset + 0, Major);
+            BufferWriter.WriteByte(buffer, offset + 1, Minor);
         }
     }
 }

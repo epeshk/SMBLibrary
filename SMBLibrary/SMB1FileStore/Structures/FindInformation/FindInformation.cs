@@ -4,21 +4,16 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace SMBLibrary.SMB1
 {
-    public abstract class FindInformation
+    public abstract class FindInformation : IDisposable
     {
         public uint NextEntryOffset;
 
-        public FindInformation()
-        {
-        }
-
-        public abstract void WriteBytes(byte[] buffer, ref int offset, bool isUnicode);
+        public abstract void WriteBytes(Span<byte> buffer, ref int offset, bool isUnicode);
         
         public abstract int GetLength(bool isUnicode);
 
@@ -27,7 +22,7 @@ namespace SMBLibrary.SMB1
             get;
         }
 
-        public static FindInformation ReadEntry(byte[] buffer, int offset, FindInformationLevel informationLevel, bool isUnicode)
+        public static FindInformation ReadEntry(Span<byte> buffer, int offset, FindInformationLevel informationLevel, bool isUnicode)
         {
             switch (informationLevel)
             {
@@ -46,6 +41,10 @@ namespace SMBLibrary.SMB1
                 default:
                     throw new UnsupportedInformationLevelException();
             }
+        }
+
+        public virtual void Dispose()
+        {
         }
     }
 }

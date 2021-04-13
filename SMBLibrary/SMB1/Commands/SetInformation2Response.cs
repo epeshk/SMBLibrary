@@ -4,10 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
-using Utilities;
+using System.Buffers;
 
 namespace SMBLibrary.SMB1
 {
@@ -16,25 +15,18 @@ namespace SMBLibrary.SMB1
     /// </summary>
     public class SetInformation2Response : SMB1Command
     {
-        public SetInformation2Response() : base()
+        public override SMB1Command Init()
         {
+            base.Init();
+            return this;
         }
 
-        public SetInformation2Response(byte[] buffer, int offset) : base(buffer, offset, false)
+        public SetInformation2Response Init(Span<byte> buffer, int offset)
         {
+            base.Init(buffer, offset, false);
+            return this;
         }
-
-        public override byte[] GetBytes(bool isUnicode)
-        {
-            return base.GetBytes(isUnicode);
-        }
-
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_SET_INFORMATION2;
-            }
-        }
+        
+        public override CommandName CommandName => CommandName.SMB_COM_SET_INFORMATION2;
     }
 }

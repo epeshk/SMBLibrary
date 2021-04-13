@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary
@@ -22,13 +24,13 @@ namespace SMBLibrary
         private uint VolumeLabelLength;
         public bool SupportsObjects;
         public byte Reserved;
-        public string VolumeLabel = String.Empty;
+        public IMemoryOwner<char> VolumeLabel = MemoryOwner<char>.Empty;
 
         public FileFsVolumeInformation()
         {
         }
 
-        public FileFsVolumeInformation(byte[] buffer, int offset)
+        public FileFsVolumeInformation(Span<byte> buffer, int offset)
         {
             VolumeCreationTime = FileTimeHelper.ReadNullableFileTime(buffer, offset + 0);
             VolumeSerialNumber = LittleEndianConverter.ToUInt32(buffer, offset + 8);
@@ -37,35 +39,24 @@ namespace SMBLibrary
             Reserved = ByteReader.ReadByte(buffer, offset + 17);
             if (VolumeLabelLength > 0)
             {
-                VolumeLabel = ByteReader.ReadUTF16String(buffer, offset + 18, (int)VolumeLabelLength / 2);
+                VolumeLabel = MemoryOwner<char>.Empty; 
+                ByteReader.ReadUTF16String(VolumeLabel.Memory.Span, buffer, offset + 18, (int)VolumeLabelLength / 2);
             }
         }
 
-        public override void WriteBytes(byte[] buffer, int offset)
+        public override void WriteBytes(Span<byte> buffer, int offset)
         {
-            VolumeLabelLength = (uint)(VolumeLabel.Length * 2);
+            VolumeLabelLength = (uint)(VolumeLabel.Memory.Length * 2);
             FileTimeHelper.WriteFileTime(buffer, offset + 0, VolumeCreationTime);
             LittleEndianWriter.WriteUInt32(buffer, offset + 8, VolumeSerialNumber);
             LittleEndianWriter.WriteUInt32(buffer, offset + 12, VolumeLabelLength);
-            ByteWriter.WriteByte(buffer, offset + 16, Convert.ToByte(SupportsObjects));
-            ByteWriter.WriteByte(buffer, offset + 17, Reserved);
-            ByteWriter.WriteUTF16String(buffer, offset + 18, VolumeLabel);
+            BufferWriter.WriteByte(buffer, offset + 16, Convert.ToByte(SupportsObjects));
+            BufferWriter.WriteByte(buffer, offset + 17, Reserved);
+            BufferWriter.WriteUTF16String(buffer, offset + 18, VolumeLabel.Memory.Span);
         }
 
-        public override FileSystemInformationClass FileSystemInformationClass
-        {
-            get
-            {
-                return FileSystemInformationClass.FileFsVolumeInformation;
-            }
-        }
+        public override FileSystemInformationClass FileSystemInformationClass => FileSystemInformationClass.FileFsVolumeInformation;
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength + VolumeLabel.Length * 2;
-            }
-        }
+        public override int Length => FixedLength + VolumeLabel.Memory.Length * 2;
     }
 }

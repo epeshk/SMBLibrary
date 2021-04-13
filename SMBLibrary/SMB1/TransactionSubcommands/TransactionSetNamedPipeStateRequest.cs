@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -21,36 +22,31 @@ namespace SMBLibrary.SMB1
         // Parameters:
         public PipeState PipeState;
 
-        public TransactionSetNamedPipeStateRequest() : base()
+        public TransactionSetNamedPipeStateRequest()
         {
         }
 
-        public TransactionSetNamedPipeStateRequest(byte[] setup, byte[] parameters) : base()
+        public TransactionSetNamedPipeStateRequest(Span<byte> setup, Span<byte> parameters)
         {
             FID = LittleEndianConverter.ToUInt16(setup, 2);
-
             PipeState = (PipeState)LittleEndianConverter.ToUInt16(parameters, 0);
         }
 
-        public override byte[] GetSetup()
+        public override IMemoryOwner<byte> GetSetup()
         {
-            byte[] setup = new byte[4];
-            LittleEndianWriter.WriteUInt16(setup, 0, (ushort)this.SubcommandName);
+            var setup = Arrays.Rent(4);
+            LittleEndianWriter.WriteUInt16(setup, 0, (ushort)SubcommandName);
             LittleEndianWriter.WriteUInt16(setup, 2, FID);
             return setup;
         }
 
-        public override byte[] GetParameters()
+        public override IMemoryOwner<byte> GetParameters()
         {
-            return LittleEndianConverter.GetBytes((ushort)PipeState);
+            var buf = Arrays.Rent(2);
+            LittleEndianConverter.GetBytes(buf.Memory.Span, (ushort)PipeState);
+            return buf;
         }
 
-        public override TransactionSubcommandName SubcommandName
-        {
-            get
-            {
-                return TransactionSubcommandName.TRANS_SET_NMPIPE_STATE;
-            }
-        }
+        public override TransactionSubcommandName SubcommandName => TransactionSubcommandName.TRANS_SET_NMPIPE_STATE;
     }
 }

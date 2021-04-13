@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -25,34 +26,22 @@ namespace SMBLibrary.SMB1
         {
         }
 
-        public QueryFSDeviceInfo(byte[] buffer, int offset)
+        public QueryFSDeviceInfo(Span<byte> buffer, int offset)
         {
             DeviceType = (DeviceType)LittleEndianConverter.ToUInt32(buffer, offset + 0);
             DeviceCharacteristics = (DeviceCharacteristics)LittleEndianConverter.ToUInt32(buffer, offset + 4);
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            byte[] buffer = new byte[Length];
-            LittleEndianWriter.WriteUInt32(buffer, 0, (uint)DeviceType);
-            LittleEndianWriter.WriteUInt32(buffer, 4, (uint)DeviceCharacteristics);
+            var buffer = Arrays.Rent(Length);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, 0, (uint)DeviceType);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, 4, (uint)DeviceCharacteristics);
             return buffer;
         }
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength;
-            }
-        }
+        public override int Length => FixedLength;
 
-        public override QueryFSInformationLevel InformationLevel
-        {
-            get
-            {
-                return QueryFSInformationLevel.SMB_QUERY_FS_DEVICE_INFO;
-            }
-        }
+        public override QueryFSInformationLevel InformationLevel => QueryFSInformationLevel.SMB_QUERY_FS_DEVICE_INFO;
     }
 }

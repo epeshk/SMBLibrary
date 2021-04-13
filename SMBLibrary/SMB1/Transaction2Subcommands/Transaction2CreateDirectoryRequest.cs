@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -22,42 +23,36 @@ namespace SMBLibrary.SMB1
         // Data
         public FullExtendedAttributeList ExtendedAttributeList;
 
-        public Transaction2CreateDirectoryRequest() : base()
+        public Transaction2CreateDirectoryRequest()
         {}
 
-        public Transaction2CreateDirectoryRequest(byte[] parameters, byte[] data, bool isUnicode) : base()
+        public Transaction2CreateDirectoryRequest(IMemoryOwner<byte> parameters, IMemoryOwner<byte> data, bool isUnicode)
         {
             Reserved = LittleEndianConverter.ToUInt32(parameters, 0);
             DirectoryName = SMB1Helper.ReadSMBString(parameters, 4, isUnicode);
             ExtendedAttributeList = new FullExtendedAttributeList(data);
         }
 
-        public override byte[] GetSetup()
+        public override void GetSetupInto(Span<byte> target)
         {
-            return LittleEndianConverter.GetBytes((ushort)SubcommandName);
+            LittleEndianConverter.GetBytes(target, (ushort)SubcommandName);
         }
 
-        public override byte[] GetParameters(bool isUnicode)
+        public override IMemoryOwner<byte> GetParameters(bool isUnicode)
         {
-            int length = 4;
+            var length = 4;
             length += isUnicode ? DirectoryName.Length * 2 + 2 : DirectoryName.Length + 1 + 1;
-            byte[] parameters = new byte[length];
-            LittleEndianWriter.WriteUInt32(parameters, 0, Reserved);
-            SMB1Helper.WriteSMBString(parameters, 4, isUnicode, DirectoryName);
+            var parameters = Arrays.Rent(length);
+            LittleEndianWriter.WriteUInt32(parameters.Memory.Span, 0, Reserved);
+            SMB1Helper.WriteSMBString(parameters.Memory.Span, 4, isUnicode, DirectoryName);
             return parameters;
         }
 
-        public override byte[] GetData(bool isUnicode)
+        public override IMemoryOwner<byte> GetData(bool isUnicode)
         {
             return ExtendedAttributeList.GetBytes();
         }
 
-        public override Transaction2SubcommandName SubcommandName
-        {
-            get
-            {
-                return Transaction2SubcommandName.TRANS2_CREATE_DIRECTORY;
-            }
-        }
+        public override Transaction2SubcommandName SubcommandName => Transaction2SubcommandName.TRANS2_CREATE_DIRECTORY;
     }
 }

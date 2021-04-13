@@ -4,10 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.NetBios
@@ -30,17 +29,17 @@ namespace SMBLibrary.NetBios
             Type = type;
             Class = ResourceRecordClass.In;
             TTL = (uint)new TimeSpan(7, 0, 0, 0).TotalSeconds;
-            Data = new byte[0];
+            Data = Array.Empty<byte>();
         }
 
-        public ResourceRecord(byte[] buffer, ref int offset)
+        public ResourceRecord(Span<byte> buffer, ref int offset)
         {
             Name = NetBiosUtils.DecodeName(buffer, ref offset);
             Type = (NameRecordType)BigEndianReader.ReadUInt16(buffer, ref offset);
             Class = (ResourceRecordClass)BigEndianReader.ReadUInt16(buffer, ref offset);
             TTL = BigEndianReader.ReadUInt32(buffer, ref offset);
-            ushort dataLength = BigEndianReader.ReadUInt16(buffer, ref offset);
-            Data = ByteReader.ReadBytes(buffer, ref offset, dataLength);
+            var dataLength = BigEndianReader.ReadUInt16(buffer, ref offset);
+            Data = ByteReader.ReadBytes_RentArray(buffer, ref offset, dataLength);
         }
 
         public void WriteBytes(Stream stream)
@@ -56,14 +55,14 @@ namespace SMBLibrary.NetBios
             }
             else
             {
-                byte[] encodedName = NetBiosUtils.EncodeName(Name, String.Empty);
-                ByteWriter.WriteBytes(stream, encodedName);
+                var encodedName = NetBiosUtils.EncodeName(Name, String.Empty);
+                BufferWriter.WriteBytes(stream, encodedName);
             }
             BigEndianWriter.WriteUInt16(stream, (ushort)Type);
             BigEndianWriter.WriteUInt16(stream, (ushort)Class);
             BigEndianWriter.WriteUInt32(stream, TTL);
             BigEndianWriter.WriteUInt16(stream, (ushort)Data.Length);
-            ByteWriter.WriteBytes(stream, Data);
+            BufferWriter.WriteBytes(stream, Data);
         }
     }
 }

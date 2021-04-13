@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -24,37 +25,37 @@ namespace SMBLibrary.SMB2
         public NotifyChangeFilter CompletionFilter;
         public uint Reserved;
 
-        public ChangeNotifyRequest() : base(SMB2CommandName.ChangeNotify)
+        public ChangeNotifyRequest()
         {
+            Init(SMB2CommandName.ChangeNotify);
             StructureSize = DeclaredSize;
         }
 
-        public ChangeNotifyRequest(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            Flags = (ChangeNotifyFlags)LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 2);
-            OutputBufferLength = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 4);
-            FileId = new FileID(buffer, offset + SMB2Header.Length + 8);
-            CompletionFilter = (NotifyChangeFilter)LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 24);
-            Reserved = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 28);
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            Flags = (ChangeNotifyFlags)LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 2);
+            OutputBufferLength = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 4);
+            FileId = ObjectsPool<FileID>.Get().Init(buffer, offset + Smb2Header.Length + 8);
+            CompletionFilter = (NotifyChangeFilter)LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 24);
+            Reserved = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 28);
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 2, (ushort)Flags);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 4, OutputBufferLength);
-            FileId.WriteBytes(buffer, offset + 8);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 24, (uint)CompletionFilter);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 28, Reserved);
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            LittleEndianWriter.WriteUInt16(buffer, 2, (ushort)Flags);
+            LittleEndianWriter.WriteUInt32(buffer, 4, OutputBufferLength);
+            FileId.WriteBytes(buffer, 8);
+            LittleEndianWriter.WriteUInt32(buffer, 24, (uint)CompletionFilter);
+            LittleEndianWriter.WriteUInt32(buffer, 28, Reserved);
         }
 
         public bool WatchTree
         {
-            get
-            {
-                return ((Flags & ChangeNotifyFlags.WatchTree) > 0);
-            }
+            get => ((Flags & ChangeNotifyFlags.WatchTree) > 0);
             set
             {
                 if (value)
@@ -68,12 +69,16 @@ namespace SMBLibrary.SMB2
             }
         }
 
-        public override int CommandLength
+        public override void Dispose()
         {
-            get
-            {
-                return DeclaredSize;
-            }
+            base.Dispose();
+            
+            //FileId.Dispose(); - fileId handle is frequently used for multiple requests and can be disposed via ISMBFileStore.CloseFile(...) method.  
+            FileId = default;
+
+            ObjectsPool<ChangeNotifyRequest>.Return(this);
         }
+
+        public override int CommandLength => DeclaredSize;
     }
 }

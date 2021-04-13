@@ -4,14 +4,16 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using MemoryPools.Memory;
 using SMBLibrary.Authentication.GSSAPI;
 using SMBLibrary.NetBios;
-using SMBLibrary.Services;
+using SMBLibrary.Server.SMB2;
 using SMBLibrary.SMB1;
 using SMBLibrary.SMB2;
 using Utilities;
@@ -83,7 +85,7 @@ namespace SMBLibrary.Server
                 m_serverStartTime = DateTime.Now;
 
                 m_listenerSocket = new Socket(m_serverAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-                int port = (m_transport == SMBTransportType.DirectTCPTransport ? DirectTCPPort : NetBiosOverTCPPort);
+                var port = (m_transport == SMBTransportType.DirectTCPTransport ? DirectTCPPort : NetBiosOverTCPPort);
                 m_listenerSocket.Bind(new IPEndPoint(m_serverAddress, port));
                 m_listenerSocket.Listen((int)SocketOptionName.MaxConnections);
                 m_listenerSocket.BeginAccept(ConnectRequestCallback, m_listenerSocket);
@@ -119,7 +121,7 @@ namespace SMBLibrary.Server
         // This method accepts new connections
         private void ConnectRequestCallback(IAsyncResult ar)
         {
-            Socket listenerSocket = (Socket)ar.AsyncState;
+            var listenerSocket = (Socket)ar.AsyncState;
 
             Socket clientSocket;
             try
@@ -148,38 +150,55 @@ namespace SMBLibrary.Server
             SocketUtils.SetKeepAlive(clientSocket, TimeSpan.FromMinutes(2));
             // Disable the Nagle Algorithm for this tcp socket:
             clientSocket.NoDelay = true;
-            IPEndPoint clientEndPoint = (IPEndPoint)clientSocket.RemoteEndPoint;
-            EventHandler<ConnectionRequestEventArgs> handler = ConnectionRequested;
-            bool acceptConnection = true;
+            var clientEndPoint = (IPEndPoint)clientSocket.RemoteEndPoint;
+            var handler = ConnectionRequested;
+            var acceptConnection = true;
             if (handler != null)
             {
-                ConnectionRequestEventArgs connectionRequestArgs = new ConnectionRequestEventArgs(clientEndPoint);
+                var connectionRequestArgs = new ConnectionRequestEventArgs(clientEndPoint);
                 handler(this, connectionRequestArgs);
                 acceptConnection = connectionRequestArgs.Accept;
             }
 
             if (acceptConnection)
             {
-                ConnectionState state = new ConnectionState(clientSocket, clientEndPoint, Log);
+                var state = new ConnectionState(clientSocket, clientEndPoint, Log);
                 state.LogToServer(Severity.Verbose, "New connection request accepted");
-                Thread senderThread = new Thread(delegate()
+                var senderThread = new Thread(delegate()
                 {
                     ProcessSendQueue(state);
                 });
                 senderThread.IsBackground = true;
                 senderThread.Start();
 
+                // Direct TCP transport packet is actually an NBT Session Message Packet,
+                // So in either case (NetBios over TCP or Direct TCP Transport) we will receive an NBT packet.
                 try
                 {
-                    // Direct TCP transport packet is actually an NBT Session Message Packet,
-                    // So in either case (NetBios over TCP or Direct TCP Transport) we will receive an NBT packet.
-                    clientSocket.BeginReceive(state.ReceiveBuffer.Buffer, state.ReceiveBuffer.WriteOffset, state.ReceiveBuffer.AvailableLength, 0, ReceiveCallback, state);
+                    clientSocket
+                        .ReceiveAsync(state.ReceiveBuffer.Buffer.Slice(state.ReceiveBuffer.WriteOffset, state.ReceiveBuffer.AvailableLength), SocketFlags.None)
+                        .AsTask()
+                        .ContinueWith((task, _) => ReceiveCallback(task.Result, state), null);
                 }
                 catch (ObjectDisposedException)
                 {
+                    state.LogToServer(Severity.Debug, "The connection was terminated");
+                    m_connectionManager.ReleaseConnection(state);
+                    return;
                 }
-                catch (SocketException)
+                catch (SocketException ex)
                 {
+                    const int WSAECONNRESET = 10054;
+                    if (ex.ErrorCode == WSAECONNRESET)
+                    {
+                        state.LogToServer(Severity.Debug, "The connection was forcibly closed by the remote host");
+                    }
+                    else
+                    {
+                        state.LogToServer(Severity.Debug, "The connection was terminated, Socket error code: {0}", ex.ErrorCode);
+                    }
+                    m_connectionManager.ReleaseConnection(state);
+                    return;
                 }
             }
             else
@@ -191,10 +210,9 @@ namespace SMBLibrary.Server
             listenerSocket.BeginAccept(ConnectRequestCallback, listenerSocket);
         }
 
-        private void ReceiveCallback(IAsyncResult result)
+        private void ReceiveCallback(int bytesGot, ConnectionState state)
         {
-            ConnectionState state = (ConnectionState)result.AsyncState;
-            Socket clientSocket = state.ClientSocket;
+            var clientSocket = state.ClientSocket;
 
             if (!m_listening)
             {
@@ -202,32 +220,7 @@ namespace SMBLibrary.Server
                 return;
             }
 
-            int numberOfBytesReceived;
-            try
-            {
-                numberOfBytesReceived = clientSocket.EndReceive(result);
-            }
-            catch (ObjectDisposedException)
-            {
-                state.LogToServer(Severity.Debug, "The connection was terminated");
-                m_connectionManager.ReleaseConnection(state);
-                return;
-            }
-            catch (SocketException ex)
-            {
-                const int WSAECONNRESET = 10054;
-                if (ex.ErrorCode == WSAECONNRESET)
-                {
-                    state.LogToServer(Severity.Debug, "The connection was forcibly closed by the remote host");
-                }
-                else
-                {
-                    state.LogToServer(Severity.Debug, "The connection was terminated, Socket error code: {0}", ex.ErrorCode);
-                }
-                m_connectionManager.ReleaseConnection(state);
-                return;
-            }
-
+            int numberOfBytesReceived = bytesGot;
             if (numberOfBytesReceived == 0)
             {
                 state.LogToServer(Severity.Debug, "The client closed the connection");
@@ -236,7 +229,7 @@ namespace SMBLibrary.Server
             }
 
             state.UpdateLastReceiveDT();
-            NBTConnectionReceiveBuffer receiveBuffer = state.ReceiveBuffer;
+            var receiveBuffer = state.ReceiveBuffer;
             receiveBuffer.SetNumberOfBytesReceived(numberOfBytesReceived);
             ProcessConnectionBuffer(ref state);
 
@@ -244,7 +237,10 @@ namespace SMBLibrary.Server
             {
                 try
                 {
-                    clientSocket.BeginReceive(state.ReceiveBuffer.Buffer, state.ReceiveBuffer.WriteOffset, state.ReceiveBuffer.AvailableLength, 0, ReceiveCallback, state);
+                    clientSocket
+                        .ReceiveAsync(state.ReceiveBuffer.Buffer.Slice(state.ReceiveBuffer.WriteOffset, state.ReceiveBuffer.AvailableLength), SocketFlags.None)
+                        .AsTask()
+                        .ContinueWith((task, _) => ReceiveCallback(task.Result, state), null);
                 }
                 catch (ObjectDisposedException)
                 {
@@ -259,12 +255,10 @@ namespace SMBLibrary.Server
 
         private void ProcessConnectionBuffer(ref ConnectionState state)
         {
-            Socket clientSocket = state.ClientSocket;
-
-            NBTConnectionReceiveBuffer receiveBuffer = state.ReceiveBuffer;
+            var receiveBuffer = state.ReceiveBuffer;
             while (receiveBuffer.HasCompletePacket())
             {
-                SessionPacket packet = null;
+                SessionPacketBase packet = null;
                 try
                 {
                     packet = receiveBuffer.DequeuePacket();
@@ -278,55 +272,58 @@ namespace SMBLibrary.Server
 
                 if (packet != null)
                 {
-                    ProcessPacket(packet, ref state);
+                    if (ProcessPacket(packet, ref state))
+                    {
+                        packet.Dispose();
+                    }
                 }
             }
         }
 
-        private void ProcessPacket(SessionPacket packet, ref ConnectionState state)
+        private bool ProcessPacket(SessionPacketBase packet, ref ConnectionState state)
         {
             if (packet is SessionMessagePacket)
             {
                 // Note: To be compatible with SMB2 specifications, we must accept SMB_COM_NEGOTIATE.
                 // We will disconnect the connection if m_enableSMB1 == false and the client does not support SMB2.
-                bool acceptSMB1 = (state.Dialect == SMBDialect.NotSet || state.Dialect == SMBDialect.NTLM012);
-                bool acceptSMB2 = (m_enableSMB2 && (state.Dialect == SMBDialect.NotSet || state.Dialect == SMBDialect.SMB202 || state.Dialect == SMBDialect.SMB210));
+                var acceptSMB1 = (state.Dialect == SMBDialect.NotSet || state.Dialect == SMBDialect.NTLM012);
+                var acceptSMB2 = (m_enableSMB2 && (state.Dialect == SMBDialect.NotSet || state.Dialect == SMBDialect.SMB202 || state.Dialect == SMBDialect.SMB210));
 
-                if (SMB1Header.IsValidSMB1Header(packet.Trailer))
+                if (SMB1Header.IsValidSMB1Header(packet.Trailer.Memory.Span))
                 {
                     if (!acceptSMB1)
                     {
                         state.LogToServer(Severity.Verbose, "Rejected SMB1 message");
                         state.ClientSocket.Close();
-                        return;
+                        return true;
                     }
 
                     SMB1Message message = null;
                     try
                     {
-                        message = SMB1Message.GetSMB1Message(packet.Trailer);
+                        message = SMB1Message.GetSMB1Message(packet.Trailer.Memory.Span);
                     }
                     catch (Exception ex)
                     {
                         state.LogToServer(Severity.Warning, "Invalid SMB1 message: " + ex.Message);
                         state.ClientSocket.Close();
-                        return;
+                        return true;
                     }
                     state.LogToServer(Severity.Verbose, "SMB1 message received: {0} requests, First request: {1}, Packet length: {2}", message.Commands.Count, message.Commands[0].CommandName.ToString(), packet.Length);
                     if (state.Dialect == SMBDialect.NotSet && m_enableSMB2)
                     {
                         // Check if the client supports SMB 2
-                        List<string> smb2Dialects = SMB2.NegotiateHelper.FindSMB2Dialects(message);
+                        var smb2Dialects = NegotiateHelper.FindSMB2Dialects(message);
                         if (smb2Dialects.Count > 0)
                         {
-                            SMB2Command response = SMB2.NegotiateHelper.GetNegotiateResponse(smb2Dialects, m_securityProvider, state, m_transport, m_serverGuid, m_serverStartTime);
+                            var response = NegotiateHelper.GetNegotiateResponse(smb2Dialects, m_securityProvider, state, m_transport, m_serverGuid, m_serverStartTime);
                             if (state.Dialect != SMBDialect.NotSet)
                             {
                                 state = new SMB2ConnectionState(state);
                                 m_connectionManager.AddConnection(state);
                             }
                             EnqueueResponse(state, response);
-                            return;
+                            return true;
                         }
                     }
 
@@ -342,25 +339,25 @@ namespace SMBLibrary.Server
                         state.ClientSocket.Close();
                     }
                 }
-                else if (SMB2Header.IsValidSMB2Header(packet.Trailer))
+                else if (Smb2Header.IsValidSmb2Header(packet.Trailer.Memory.Span))
                 {
                     if (!acceptSMB2)
                     {
                         state.LogToServer(Severity.Verbose, "Rejected SMB2 message");
                         state.ClientSocket.Close();
-                        return;
+                        return true;
                     }
 
                     List<SMB2Command> requestChain;
                     try
                     {
-                        requestChain = SMB2Command.ReadRequestChain(packet.Trailer, 0);
+                        requestChain = SMB2Command.ReadRequestChain(packet.Trailer.Memory.Span, 0);
                     }
                     catch (Exception ex)
                     {
                         state.LogToServer(Severity.Warning, "Invalid SMB2 request chain: " + ex.Message);
                         state.ClientSocket.Close();
-                        return;
+                        return true;
                     }
                     state.LogToServer(Severity.Verbose, "SMB2 request chain received: {0} requests, First request: {1}, Packet length: {2}", requestChain.Count, requestChain[0].CommandName.ToString(), packet.Length);
                     ProcessSMB2RequestChain(requestChain, ref state);
@@ -373,19 +370,23 @@ namespace SMBLibrary.Server
             }
             else if (packet is SessionRequestPacket && m_transport == SMBTransportType.NetBiosOverTCP)
             {
-                PositiveSessionResponsePacket response = new PositiveSessionResponsePacket();
+                var response = ObjectsPool<PositiveSessionResponsePacket>.Get().Init();
                 state.SendQueue.Enqueue(response);
+                return false;
             }
             else if (packet is SessionKeepAlivePacket && m_transport == SMBTransportType.NetBiosOverTCP)
             {
                 // [RFC 1001] NetBIOS session keep alives do not require a response from the NetBIOS peer
+                return true;
             }
             else
             {
                 state.LogToServer(Severity.Warning, "Inappropriate NetBIOS session packet");
                 state.ClientSocket.Close();
-                return;
+                return true;
             }
+
+            return true;
         }
 
         private void ProcessSendQueue(ConnectionState state)
@@ -393,17 +394,19 @@ namespace SMBLibrary.Server
             state.LogToServer(Severity.Trace, "Entering ProcessSendQueue");
             while (true)
             {
-                SessionPacket response;
-                bool stopped = !state.SendQueue.TryDequeue(out response);
+                SessionPacketBase response;
+                var stopped = !state.SendQueue.TryDequeue(out response);
                 if (stopped)
                 {
                     return;
                 }
-                Socket clientSocket = state.ClientSocket;
+                var clientSocket = state.ClientSocket;
                 try
                 {
-                    byte[] responseBytes = response.GetBytes();
-                    clientSocket.Send(responseBytes);
+                    var responseBytes = response.GetBytes();
+                    clientSocket.Send(responseBytes.Memory.Span);
+                    responseBytes.Dispose();
+                    response.Dispose();
                 }
                 catch (SocketException ex)
                 {
@@ -436,7 +439,7 @@ namespace SMBLibrary.Server
         private void Log(Severity severity, string message)
         {
             // To be thread-safe we must capture the delegate reference first
-            EventHandler<LogEntry> handler = LogEntryAdded;
+            var handler = LogEntryAdded;
             if (handler != null)
             {
                 handler(this, new LogEntry(DateTime.Now, severity, "SMB Server", message));

@@ -3,6 +3,7 @@ namespace SMBLibrary
 {
     public enum NTStatus : uint
     {
+        STATUS_REQUEST_NOT_ACCEPTED = 0xC00000D0,
         STATUS_SUCCESS = 0x00000000,
         STATUS_PENDING = 0x00000103,
         STATUS_NOTIFY_CLEANUP = 0x0000010B,

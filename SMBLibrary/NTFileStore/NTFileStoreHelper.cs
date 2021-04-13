@@ -4,14 +4,13 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
+
 using System.IO;
-using Utilities;
+using MemoryPools.Memory;
 
 namespace SMBLibrary
 {
-    public partial class NTFileStoreHelper
+    public class NTFileStoreHelper
     {
         public static FileAccess ToCreateFileAccess(AccessMask desiredAccess, CreateDisposition createDisposition)
         {
@@ -98,7 +97,7 @@ namespace SMBLibrary
 
         public static FileShare ToFileShare(ShareAccess shareAccess)
         {
-            FileShare result = FileShare.None;
+            var result = FileShare.None;
             if ((shareAccess & ShareAccess.Read) > 0)
             {
                 result |= FileShare.Read;
@@ -121,13 +120,13 @@ namespace SMBLibrary
         {
             object handle;
             FileStatus fileStatus;
-            NTStatus openStatus = fileStore.CreateFile(out handle, out fileStatus, path, (AccessMask)FileAccessMask.FILE_READ_ATTRIBUTES, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, 0, securityContext);
+            var openStatus = fileStore.CreateFile(out handle, out fileStatus, Arrays.RentFrom<char>(path), (AccessMask)FileAccessMask.FILE_READ_ATTRIBUTES, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, 0, securityContext);
             if (openStatus != NTStatus.STATUS_SUCCESS)
             {
                 return null;
             }
             FileInformation fileInfo;
-            NTStatus queryStatus = fileStore.GetFileInformation(out fileInfo, handle, FileInformationClass.FileNetworkOpenInformation);
+            var queryStatus = fileStore.GetFileInformation(out fileInfo, handle, FileInformationClass.FileNetworkOpenInformation);
             fileStore.CloseFile(handle);
             if (queryStatus != NTStatus.STATUS_SUCCESS)
             {
@@ -139,7 +138,7 @@ namespace SMBLibrary
         public static FileNetworkOpenInformation GetNetworkOpenInformation(INTFileStore fileStore, object handle)
         {
             FileInformation fileInfo;
-            NTStatus status = fileStore.GetFileInformation(out fileInfo, handle, FileInformationClass.FileNetworkOpenInformation);
+            var status = fileStore.GetFileInformation(out fileInfo, handle, FileInformationClass.FileNetworkOpenInformation);
             if (status != NTStatus.STATUS_SUCCESS)
             {
                 return null;

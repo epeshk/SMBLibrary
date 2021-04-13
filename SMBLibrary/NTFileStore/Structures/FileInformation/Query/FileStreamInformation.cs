@@ -4,9 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
-using Utilities;
 
 namespace SMBLibrary
 {
@@ -21,7 +21,7 @@ namespace SMBLibrary
         {
         }
 
-        public FileStreamInformation(byte[] buffer, int offset)
+        public FileStreamInformation(Span<byte> buffer, int offset)
         {
             if (offset < buffer.Length)
             {
@@ -36,43 +36,31 @@ namespace SMBLibrary
             }
         }
 
-        public override void WriteBytes(byte[] buffer, int offset)
+        public override void WriteBytes(Span<byte> buffer, int offset)
         {
-            for (int index = 0; index < m_entries.Count; index++)
+            for (var index = 0; index < m_entries.Count; index++)
             {
-                FileStreamEntry entry = m_entries[index];
-                int entryLength = entry.PaddedLength;
+                var entry = m_entries[index];
+                var entryLength = entry.PaddedLength;
                 entry.NextEntryOffset = (index < m_entries.Count - 1) ? (uint)entryLength : 0;
                 entry.WriteBytes(buffer, offset);
                 offset += entryLength;
             }
         }
 
-        public List<FileStreamEntry> Entries
-        {
-            get
-            {
-                return m_entries;
-            }
-        }
+        public List<FileStreamEntry> Entries => m_entries;
 
-        public override FileInformationClass FileInformationClass
-        {
-            get
-            {
-                return FileInformationClass.FileStreamInformation;
-            }
-        }
+        public override FileInformationClass FileInformationClass => FileInformationClass.FileStreamInformation;
 
         public override int Length
         {
             get
             {
-                int length = 0;
-                for (int index = 0; index < m_entries.Count; index++)
+                var length = 0;
+                for (var index = 0; index < m_entries.Count; index++)
                 {
-                    FileStreamEntry entry = m_entries[index];
-                    int entryLength = (index < m_entries.Count - 1) ? entry.PaddedLength : entry.Length;
+                    var entry = m_entries[index];
+                    var entryLength = (index < m_entries.Count - 1) ? entry.PaddedLength : entry.Length;
                     length += entryLength;
                 }
                 return length;

@@ -4,9 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using Utilities;
+
+using System.Buffers;
+using MemoryPools.Memory;
 
 namespace SMBLibrary.SMB1
 {
@@ -17,25 +17,25 @@ namespace SMBLibrary.SMB1
     {
         public const int ParametersLength = 0;
         // Data:
-        public byte[] InformationBytes;
+        public IMemoryOwner<byte> InformationBytes;
 
-        public Transaction2QueryFSInformationResponse() : base()
+        public Transaction2QueryFSInformationResponse()
         {
         }
 
-        public Transaction2QueryFSInformationResponse(byte[] parameters, byte[] data, bool isUnicode) : base()
+        public Transaction2QueryFSInformationResponse(IMemoryOwner<byte> parameters, IMemoryOwner<byte> data, bool isUnicode)
         {
-            InformationBytes = data;
+            InformationBytes = data.AddOwner();
         }
 
-        public override byte[] GetData(bool isUnicode)
+        public override IMemoryOwner<byte> GetData(bool isUnicode)
         {
             return InformationBytes;
         }
 
         public QueryFSInformation GetQueryFSInformation(QueryFSInformationLevel informationLevel, bool isUnicode)
         {
-            return QueryFSInformation.GetQueryFSInformation(InformationBytes, informationLevel, isUnicode);
+            return QueryFSInformation.GetQueryFSInformation(InformationBytes.Memory.Span, informationLevel, isUnicode);
         }
 
         public void SetQueryFSInformation(QueryFSInformation queryFSInformation, bool isUnicode)
@@ -48,7 +48,7 @@ namespace SMBLibrary.SMB1
         /// </remarks>
         public FileSystemInformation GetFileSystemInformation(FileSystemInformationClass informationClass)
         {
-            return FileSystemInformation.GetFileSystemInformation(InformationBytes, 0, informationClass);
+            return FileSystemInformation.GetFileSystemInformation(InformationBytes.Memory.Span, 0, informationClass);
         }
 
         /// <remarks>
@@ -59,12 +59,6 @@ namespace SMBLibrary.SMB1
             InformationBytes = information.GetBytes();
         }
 
-        public override Transaction2SubcommandName SubcommandName
-        {
-            get
-            {
-                return Transaction2SubcommandName.TRANS2_QUERY_FS_INFORMATION;
-            }
-        }
+        public override Transaction2SubcommandName SubcommandName => Transaction2SubcommandName.TRANS2_QUERY_FS_INFORMATION;
     }
 }

@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -22,41 +23,41 @@ namespace SMBLibrary.SMB2
         public uint Reserved;
         public FileID FileId;
 
-        public CloseRequest() : base(SMB2CommandName.Close)
+        public CloseRequest Init()
         {
+            Init(SMB2CommandName.Close);
             StructureSize = DeclaredSize;
+            Reserved = 0;
+            return this;
         }
 
-        public CloseRequest(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            Flags = (CloseFlags)LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 2);
-            Reserved = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 4);
-            FileId = new FileID(buffer, offset + SMB2Header.Length + 8);
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            Flags = (CloseFlags)LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 2);
+            Reserved = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 4);
+            FileId = ObjectsPool<FileID>.Get().Init(buffer, offset + Smb2Header.Length + 8);
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 2, (ushort)Flags);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 4, Reserved);
-            FileId.WriteBytes(buffer, offset + 8);
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            LittleEndianWriter.WriteUInt16(buffer, 2, (ushort)Flags);
+            LittleEndianWriter.WriteUInt32(buffer, 4, Reserved);
+            FileId.WriteBytes(buffer, 8);
         }
 
-        public bool PostQueryAttributes
+        public override void Dispose()
         {
-            get
-            {
-                return ((this.Flags & CloseFlags.PostQueryAttributes) > 0);
-            }
+            base.Dispose();
+            FileId.Dispose();
+            ObjectsPool<CloseRequest>.Return(this);
         }
 
-        public override int CommandLength
-        {
-            get
-            {
-                return DeclaredSize;
-            }
-        }
+        public bool PostQueryAttributes => ((Flags & CloseFlags.PostQueryAttributes) > 0);
+
+        public override int CommandLength => DeclaredSize;
     }
 }

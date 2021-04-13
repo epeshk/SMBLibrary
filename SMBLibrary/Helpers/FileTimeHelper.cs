@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using System.IO;
 using Utilities;
 
 namespace SMBLibrary
@@ -14,61 +16,58 @@ namespace SMBLibrary
     {
         public static readonly DateTime MinFileTimeValue = new DateTime(1601, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        public static DateTime ReadFileTime(byte[] buffer, int offset)
+        public static DateTime ReadFileTime(Span<byte> buffer, int offset)
         {
-            long span = LittleEndianConverter.ToInt64(buffer, offset);
+            var span = LittleEndianConverter.ToInt64(buffer, offset);
             if (span >= 0)
             {
                 return DateTime.FromFileTimeUtc(span);
             }
-            else
-            {
-                throw new System.IO.InvalidDataException("FILETIME cannot be negative");
-            }
+
+            throw new InvalidDataException("FILETIME cannot be negative");
         }
 
-        public static DateTime ReadFileTime(byte[] buffer, ref int offset)
+        public static DateTime ReadFileTime(Span<byte> buffer, ref int offset)
         {
             offset += 8;
             return ReadFileTime(buffer, offset - 8);
         }
 
-        public static void WriteFileTime(byte[] buffer, int offset, DateTime time)
+        public static void WriteFileTime(Span<byte> buffer, int offset, DateTime time)
         {
-            long span = time.ToFileTimeUtc();
+            var span = time.ToFileTimeUtc();
             LittleEndianWriter.WriteInt64(buffer, offset, span);
         }
 
-        public static void WriteFileTime(byte[] buffer, ref int offset, DateTime time)
+        public static void WriteFileTime(Span<byte> buffer, ref int offset, DateTime time)
         {
             WriteFileTime(buffer, offset, time);
             offset += 8;
         }
 
-        public static DateTime? ReadNullableFileTime(byte[] buffer, int offset)
+        public static DateTime? ReadNullableFileTime(Span<byte> buffer, int offset)
         {
-            long span = LittleEndianConverter.ToInt64(buffer, offset);
+            var span = LittleEndianConverter.ToInt64(buffer, offset);
             if (span > 0)
             {
                 return DateTime.FromFileTimeUtc(span);
             }
-            else if (span == 0)
+
+            if (span == 0)
             {
                 return null;
             }
-            else
-            {
-                throw new System.IO.InvalidDataException("FILETIME cannot be negative");
-            }
+
+            throw new InvalidDataException("FILETIME cannot be negative");
         }
 
-        public static DateTime? ReadNullableFileTime(byte[] buffer, ref int offset)
+        public static DateTime? ReadNullableFileTime(Span<byte> buffer, ref int offset)
         {
             offset += 8;
             return ReadNullableFileTime(buffer, offset - 8);
         }
 
-        public static void WriteFileTime(byte[] buffer, int offset, DateTime? time)
+        public static void WriteFileTime(Span<byte> buffer, int offset, DateTime? time)
         {
             long span = 0;
             if (time.HasValue)
@@ -78,7 +77,7 @@ namespace SMBLibrary
             LittleEndianWriter.WriteInt64(buffer, offset, span);
         }
 
-        public static void WriteFileTime(byte[] buffer, ref int offset, DateTime? time)
+        public static void WriteFileTime(Span<byte> buffer, ref int offset, DateTime? time)
         {
             WriteFileTime(buffer, offset, time);
             offset += 8;
@@ -87,18 +86,24 @@ namespace SMBLibrary
         /// <summary>
         /// When setting file attributes, a value of -1 indicates to the server that it MUST NOT change this attribute for all subsequent operations on the same file handle.
         /// </summary>
-        public static SetFileTime ReadSetFileTime(byte[] buffer, int offset)
+        public static SetFileTime ReadSetFileTime(IMemoryOwner<byte> buffer, int offset) =>
+            ReadSetFileTime(buffer.Memory.Span, offset);
+        
+        public static SetFileTime ReadSetFileTime(Span<byte> buffer, int offset)
         {
-            long span = LittleEndianConverter.ToInt64(buffer, offset);
+            var span = LittleEndianConverter.ToInt64(buffer, offset);
             return SetFileTime.FromFileTimeUtc(span);
         }
 
         /// <summary>
         /// When setting file attributes, a value of -1 indicates to the server that it MUST NOT change this attribute for all subsequent operations on the same file handle.
         /// </summary>
-        public static void WriteSetFileTime(byte[] buffer, int offset, SetFileTime time)
+        public static void WriteSetFileTime(IMemoryOwner<byte> buffer, int offset, SetFileTime time) =>
+            WriteSetFileTime(buffer.Memory.Span, offset, time);
+        
+        public static void WriteSetFileTime(Span<byte> buffer, int offset, SetFileTime time)
         {
-            long span = time.ToFileTimeUtc();
+            var span = time.ToFileTimeUtc();
             LittleEndianWriter.WriteInt64(buffer, offset, span);
         }
     }

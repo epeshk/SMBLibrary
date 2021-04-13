@@ -4,9 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
 using System.Net;
+using SMBLibrary.Server.SMB1;
 using Utilities;
 
 namespace SMBLibrary.Server
@@ -27,7 +29,7 @@ namespace SMBLibrary.Server
         {
             lock (m_activeConnections)
             {
-                int connectionIndex = m_activeConnections.IndexOf(connection);
+                var connectionIndex = m_activeConnections.IndexOf(connection);
                 if (connectionIndex >= 0)
                 {
                     m_activeConnections.RemoveAt(connectionIndex);
@@ -47,7 +49,7 @@ namespace SMBLibrary.Server
 
         public void ReleaseConnection(IPEndPoint clientEndPoint)
         {
-            ConnectionState connection = FindConnection(clientEndPoint);
+            var connection = FindConnection(clientEndPoint);
             if (connection != null)
             {
                 ReleaseConnection(connection);
@@ -60,9 +62,10 @@ namespace SMBLibrary.Server
         /// </summary>
         public void SendSMBKeepAlive(TimeSpan inactivityDuration)
         {
-            List<ConnectionState> connections = new List<ConnectionState>(m_activeConnections);
-            foreach (ConnectionState connection in connections)
+            var connections = new List<ConnectionState>(m_activeConnections);
+            for (var index = 0; index < connections.Count; index++)
             {
+                var connection = connections[index];
                 if (connection.LastReceiveDT.Add(inactivityDuration) < DateTime.UtcNow &&
                     connection.LastSendDT.Add(inactivityDuration) < DateTime.UtcNow)
                 {
@@ -70,12 +73,12 @@ namespace SMBLibrary.Server
                     {
                         // [MS-CIFS] Clients SHOULD, at minimum, send an SMB_COM_ECHO to the server every few minutes.
                         // This means that an unsolicited SMB_COM_ECHO reply is not likely to be sent on a connection that is alive.
-                        SMBLibrary.SMB1.SMB1Message echoReply = SMB1.EchoHelper.GetUnsolicitedEchoReply();
+                        var echoReply = EchoHelper.GetUnsolicitedEchoReply();
                         SMBServer.EnqueueMessage(connection, echoReply);
                     }
                     else if (connection is SMB2ConnectionState)
                     {
-                        SMBLibrary.SMB2.EchoResponse echoResponse = SMB2.EchoHelper.GetUnsolicitedEchoResponse();
+                        var echoResponse = SMB2.EchoHelper.GetUnsolicitedEchoResponse();
                         SMBServer.EnqueueResponse(connection, echoResponse);
                     }
                 }
@@ -84,9 +87,10 @@ namespace SMBLibrary.Server
 
         public void ReleaseAllConnections()
         {
-            List<ConnectionState> connections = new List<ConnectionState>(m_activeConnections);
-            foreach (ConnectionState connection in connections)
+            var connections = new List<ConnectionState>(m_activeConnections);
+            for (var index = 0; index < connections.Count; index++)
             {
+                var connection = connections[index];
                 ReleaseConnection(connection);
             }
         }
@@ -95,7 +99,7 @@ namespace SMBLibrary.Server
         {
             lock (m_activeConnections)
             {
-                for (int index = 0; index < m_activeConnections.Count; index++)
+                for (var index = 0; index < m_activeConnections.Count; index++)
                 {
                     if (m_activeConnections[index].ClientEndPoint.Equals(clientEndPoint))
                     {
@@ -108,12 +112,13 @@ namespace SMBLibrary.Server
 
         public List<SessionInformation> GetSessionsInformation()
         {
-            List<SessionInformation> result = new List<SessionInformation>();
+            var result = new List<SessionInformation>();
             lock (m_activeConnections)
             {
-                foreach (ConnectionState connection in m_activeConnections)
+                for (var index = 0; index < m_activeConnections.Count; index++)
                 {
-                    List<SessionInformation> sessions = connection.GetSessionsInformation();
+                    var connection = m_activeConnections[index];
+                    var sessions = connection.GetSessionsInformation();
                     result.AddRange(sessions);
                 }
             }

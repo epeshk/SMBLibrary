@@ -4,9 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
 using System.Text;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.Authentication.GSSAPI
@@ -22,43 +24,47 @@ namespace SMBLibrary.Authentication.GSSAPI
 
     public class DerEncodingHelper
     {
-        public static int ReadLength(byte[] buffer, ref int offset)
+        public static int ReadLength(Span<byte> buffer, ref int offset)
         {
             int length = ByteReader.ReadByte(buffer, ref offset);
             if (length >= 0x80)
             {
-                int lengthFieldSize = (length & 0x7F);
-                byte[] lengthField = ByteReader.ReadBytes(buffer, ref offset, lengthFieldSize);
+                var lengthFieldSize = (length & 0x7F);
+                var start = offset;
+                offset += lengthFieldSize;
                 length = 0;
-                foreach (byte value in lengthField)
+                for (var i = start; i < offset; i++)
                 {
                     length *= 256;
-                    length += value;
+                    length += buffer[i];
                 }
             }
             return length;
         }
 
-        public static void WriteLength(byte[] buffer, ref int offset, int length)
+        public static void WriteLength(Span<byte> buffer, ref int offset, int length)
         {
+            var pos = sizeof(int);
+            
             if (length >= 0x80)
             {
-                List<byte> values = new List<byte>();
+                using var values = Arrays.Rent(sizeof(int));
                 do
                 {
-                    byte value = (byte)(length % 256);
-                    values.Add(value);
+                    pos--;
+                    var value = (byte)(length % 256);
+                    values.Memory.Span[pos] = value;
                     length = length / 256;
                 }
                 while (length > 0);
-                values.Reverse();
-                byte[] lengthField = values.ToArray();
-                ByteWriter.WriteByte(buffer, ref offset, (byte)(0x80 | lengthField.Length));
-                ByteWriter.WriteBytes(buffer, ref offset, lengthField);
+
+                var scoped = values.Memory.Span.Slice(pos);
+                BufferWriter.WriteByte(buffer, ref offset, (byte)(0x80 | scoped.Length));
+                BufferWriter.WriteBytes(buffer, ref offset, scoped);
             }
             else
             {
-                ByteWriter.WriteByte(buffer, ref offset, (byte)length);
+                BufferWriter.WriteByte(buffer, ref offset, (byte)length);
             }
         }
 
@@ -66,7 +72,7 @@ namespace SMBLibrary.Authentication.GSSAPI
         {
             if (length >= 0x80)
             {
-                int result = 1;
+                var result = 1;
                 do
                 {
                     length = length / 256;
@@ -75,10 +81,8 @@ namespace SMBLibrary.Authentication.GSSAPI
                 while(length > 0);
                 return result;
             }
-            else
-            {
-                return 1;
-            }
+
+            return 1;
         }
 
         public static byte[] EncodeGeneralString(string value)

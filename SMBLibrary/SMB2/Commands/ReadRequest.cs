@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -29,69 +30,90 @@ namespace SMBLibrary.SMB2
         public uint RemainingBytes;
         private ushort ReadChannelInfoOffset;
         private ushort ReadChannelInfoLength;
-        public byte[] ReadChannelInfo = new byte[0];
+        public byte[] ReadChannelInfo = Array.Empty<byte>();
+        private static byte[] singleByteArray = new byte[1];
 
-        public ReadRequest() : base(SMB2CommandName.Read)
+        public ReadRequest Init()
         {
+            Padding = default;
+            Flags = default;
+            ReadLength = default;
+            Offset = default;
+            MinimumCount = default;
+            Channel = default;
+            RemainingBytes = default;
+            ReadChannelInfoOffset = default;
+            ReadChannelInfoLength = default;
+
+            Init(SMB2CommandName.Read);
+            
             StructureSize = DeclaredSize;
+            return this;
         }
 
-        public ReadRequest(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            Padding = ByteReader.ReadByte(buffer, offset + SMB2Header.Length + 2);
-            Flags = (ReadFlags)ByteReader.ReadByte(buffer, offset + SMB2Header.Length + 3);
-            ReadLength = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 4);
-            Offset = LittleEndianConverter.ToUInt64(buffer, offset + SMB2Header.Length + 8);
-            FileId = new FileID(buffer, offset + SMB2Header.Length + 16);
-            MinimumCount = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 32);
-            Channel = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 36);
-            RemainingBytes = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 40);
-            ReadChannelInfoOffset = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 44);
-            ReadChannelInfoLength = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 46);
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            Padding = ByteReader.ReadByte(buffer, offset + Smb2Header.Length + 2);
+            Flags = (ReadFlags)ByteReader.ReadByte(buffer, offset + Smb2Header.Length + 3);
+            ReadLength = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 4);
+            Offset = LittleEndianConverter.ToUInt64(buffer, offset + Smb2Header.Length + 8);
+            FileId = ObjectsPool<FileID>.Get().Init(buffer, offset + Smb2Header.Length + 16);
+            MinimumCount = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 32);
+            Channel = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 36);
+            RemainingBytes = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 40);
+            ReadChannelInfoOffset = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 44);
+            ReadChannelInfoLength = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 46);
             if (ReadChannelInfoLength > 0)
             {
-                ReadChannelInfo = ByteReader.ReadBytes(buffer, offset + ReadChannelInfoOffset, ReadChannelInfoLength);
+                ReadChannelInfo = ByteReader.ReadBytes_RentArray(buffer, offset + ReadChannelInfoOffset, ReadChannelInfoLength);
             }
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
             ReadChannelInfoOffset = 0;
             ReadChannelInfoLength = (ushort)ReadChannelInfo.Length;
             if (ReadChannelInfo.Length > 0)
             {
-                ReadChannelInfoOffset = SMB2Header.Length + FixedSize;
+                ReadChannelInfoOffset = Smb2Header.Length + FixedSize;
             }
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            ByteWriter.WriteByte(buffer, offset + 2, Padding);
-            ByteWriter.WriteByte(buffer, offset + 3, (byte)Flags);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 4, ReadLength);
-            LittleEndianWriter.WriteUInt64(buffer, offset + 8, Offset);
-            FileId.WriteBytes(buffer, offset + 16);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 32, MinimumCount);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 36, Channel);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 40, RemainingBytes);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 44, ReadChannelInfoOffset);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 46, ReadChannelInfoLength);
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            BufferWriter.WriteByte(buffer, 2, Padding);
+            BufferWriter.WriteByte(buffer, 3, (byte)Flags);
+            LittleEndianWriter.WriteUInt32(buffer, 4, ReadLength);
+            LittleEndianWriter.WriteUInt64(buffer, 8, Offset);
+            FileId.WriteBytes(buffer, 16);
+            LittleEndianWriter.WriteUInt32(buffer, 32, MinimumCount);
+            LittleEndianWriter.WriteUInt32(buffer, 36, Channel);
+            LittleEndianWriter.WriteUInt32(buffer, 40, RemainingBytes);
+            LittleEndianWriter.WriteUInt16(buffer, 44, ReadChannelInfoOffset);
+            LittleEndianWriter.WriteUInt16(buffer, 46, ReadChannelInfoLength);
             if (ReadChannelInfo.Length > 0)
             {
-                ByteWriter.WriteBytes(buffer, offset + FixedSize, ReadChannelInfo);
+                BufferWriter.WriteBytes(buffer, FixedSize, ReadChannelInfo);
             }
             else
             {
                 // The client MUST set one byte of [the buffer] field to 0
-                ByteWriter.WriteBytes(buffer, offset + FixedSize, new byte[1]);
+                BufferWriter.WriteBytes(buffer, FixedSize, singleByteArray);
             }
         }
 
-        public override int CommandLength
+        public override void Dispose()
         {
-            get
-            {
-                // The client MUST set one byte of [the buffer] field to 0
-                return Math.Max(FixedSize + ReadChannelInfo.Length, DeclaredSize);
-            }
+            base.Dispose();
+
+            //FileId.Dispose(); - fileId handle is frequently used for multiple requests and can be disposed via ISMBFileStore.CloseFile(...) method.  
+            FileId = default;
+
+            ObjectsPool<ReadRequest>.Return(this);
         }
+
+        public override int CommandLength =>
+            // The client MUST set one byte of [the buffer] field to 0
+            Math.Max(FixedSize + ReadChannelInfo.Length, DeclaredSize);
     }
 }

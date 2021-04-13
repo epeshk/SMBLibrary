@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -19,28 +20,31 @@ namespace SMBLibrary.SMB2
 
         private ushort StructureSize;
 
-        public SetInfoResponse() : base(SMB2CommandName.SetInfo)
+        public SetInfoResponse()
         {
+            Init(SMB2CommandName.SetInfo);
             Header.IsResponse = true;
             StructureSize = DeclaredSize;
         }
 
-        public SetInfoResponse(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
         }
 
-        public override int CommandLength
+        public override void Dispose()
         {
-            get
-            {
-                return DeclaredSize;
-            }
+            base.Dispose();
+            ObjectsPool<SetInfoResponse>.Return(this);
         }
+
+        public override int CommandLength => DeclaredSize;
     }
 }

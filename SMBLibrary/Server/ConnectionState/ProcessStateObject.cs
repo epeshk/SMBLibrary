@@ -4,9 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using System.Text;
+
+using System.Buffers;
 
 namespace SMBLibrary.Server
 {
@@ -17,9 +16,9 @@ namespace SMBLibrary.Server
         public uint MaxDataCount;      // The maximum number of Trans_Data bytes that the client accepts in the transaction response
         public uint Timeout;
         public string Name; // The pathname of the [..] named pipe to which the transaction subcommand applies, or a client-supplied [..] name for the transaction.
-        public byte[] TransactionSetup;
-        public byte[] TransactionParameters;
-        public byte[] TransactionData;
+        public IMemoryOwner<byte> TransactionSetup;
+        public IMemoryOwner<byte> TransactionParameters;
+        public IMemoryOwner<byte> TransactionData;
         public int TransactionParametersReceived; // length in bytes
         public int TransactionDataReceived; // length in bytes
     }

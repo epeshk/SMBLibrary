@@ -4,16 +4,15 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
-using Utilities;
+using System.Buffers;
 
 namespace SMBLibrary.SMB1
 {
     public abstract class QueryFSInformation
     {
-        public abstract byte[] GetBytes(bool isUnicode);
+        public abstract IMemoryOwner<byte> GetBytes(bool isUnicode);
 
         public abstract int Length
         {
@@ -25,7 +24,7 @@ namespace SMBLibrary.SMB1
             get;
         }
 
-        public static QueryFSInformation GetQueryFSInformation(byte[] buffer, QueryFSInformationLevel informationLevel, bool isUnicode)
+        public static QueryFSInformation GetQueryFSInformation(Span<byte> buffer, QueryFSInformationLevel informationLevel, bool isUnicode)
         {
             switch (informationLevel)
             {

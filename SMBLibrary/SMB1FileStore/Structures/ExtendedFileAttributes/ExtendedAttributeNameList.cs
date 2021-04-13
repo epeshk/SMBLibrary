@@ -4,9 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Text;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -20,31 +22,31 @@ namespace SMBLibrary.SMB1
         {
         }
 
-        public ExtendedAttributeNameList(byte[] buffer, int offset)
+        public ExtendedAttributeNameList(Span<byte> buffer, int offset)
         {
             // [MS-CIFS] length MUST contain the total size of the GEAList field, plus the size of the SizeOfListInBytes field
-            int length = (int)LittleEndianConverter.ToUInt32(buffer, offset + 0);
-            int position = offset + 4;
-            int eof = offset + length;
+            var length = (int)LittleEndianConverter.ToUInt32(buffer, offset + 0);
+            var position = offset + 4;
+            var eof = offset + length;
             while (position < eof)
             {
-                ExtendedAttributeName attribute = new ExtendedAttributeName(buffer, position);
-                this.Add(attribute);
+                var attribute = new ExtendedAttributeName(buffer, position);
+                Add(attribute);
                 position += attribute.Length;
             }
         }
 
-        public byte[] GetBytes()
+        public IMemoryOwner<byte> GetBytes()
         {
-            byte[] buffer = new byte[this.Length];
-            WriteBytes(buffer, 0);
+            var buffer = Arrays.Rent(Length);
+            WriteBytes(buffer.Memory.Span, 0);
             return buffer;
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
             LittleEndianWriter.WriteUInt32(buffer, ref offset, (uint)Length);
-            foreach (ExtendedAttributeName entry in this)
+            foreach (var entry in this)
             {
                 entry.WriteBytes(buffer, offset);
                 offset += entry.Length;
@@ -55,8 +57,8 @@ namespace SMBLibrary.SMB1
         {
             get
             {
-                int length = 4;
-                foreach (ExtendedAttributeName entry in this)
+                var length = 4;
+                foreach (var entry in this)
                 {
                     length += entry.Length;
                 }

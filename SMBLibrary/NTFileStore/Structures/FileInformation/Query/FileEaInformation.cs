@@ -4,8 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using Utilities;
 
 namespace SMBLibrary
@@ -23,30 +23,18 @@ namespace SMBLibrary
         {
         }
 
-        public FileEaInformation(byte[] buffer, int offset)
+        public FileEaInformation(Span<byte> buffer, int offset)
         {
             EaSize = LittleEndianConverter.ToUInt32(buffer, offset + 0);
         }
 
-        public override void WriteBytes(byte[] buffer, int offset)
+        public override void WriteBytes(Span<byte> buffer, int offset)
         {
             LittleEndianWriter.WriteUInt32(buffer, offset + 0, EaSize);
         }
 
-        public override FileInformationClass FileInformationClass
-        {
-            get
-            {
-                return FileInformationClass.FileEaInformation;
-            }
-        }
+        public override FileInformationClass FileInformationClass => FileInformationClass.FileEaInformation;
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength;
-            }
-        }
+        public override int Length => FixedLength;
     }
 }

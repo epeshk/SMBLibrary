@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 
 namespace SMBLibrary.Authentication.GSSAPI
 {
@@ -14,7 +15,7 @@ namespace SMBLibrary.Authentication.GSSAPI
         /// <summary>
         /// Equivalent to GSS_Accept_sec_context
         /// </summary>
-        NTStatus AcceptSecurityContext(ref object context, byte[] inputToken, out byte[] outputToken);
+        NTStatus AcceptSecurityContext(ref object context, Span<byte> inputToken, out IMemoryOwner<byte> outputToken);
 
         /// <summary>
         /// Equivalent to GSS_Delete_sec_context
@@ -27,7 +28,7 @@ namespace SMBLibrary.Authentication.GSSAPI
         /// </summary>
         object GetContextAttribute(object context, GSSAttributeName attributeName);
 
-        byte[] Identifier
+        Span<byte> Identifier
         {
             get;
         }

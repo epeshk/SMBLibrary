@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -19,38 +20,39 @@ namespace SMBLibrary.SMB1
         // Setup:
         public ushort Priority;
         // Data:
-        public byte[] WriteData;
+        public IMemoryOwner<byte> WriteData;
 
-        public TransactionCallNamedPipeRequest() : base()
+        public TransactionCallNamedPipeRequest()
         {
         }
 
-        public TransactionCallNamedPipeRequest(byte[] setup, byte[] data) : base()
+        public TransactionCallNamedPipeRequest(Span<byte> setup, IMemoryOwner<byte> data)
         {
             Priority = LittleEndianConverter.ToUInt16(setup, 2);
 
-            WriteData = data;
+            WriteData = data.AddOwner();
         }
 
-        public override byte[] GetSetup()
+        public override IMemoryOwner<byte> GetSetup()
         {
-            byte[] setup = new byte[4];
-            LittleEndianWriter.WriteUInt16(setup, 0, (ushort)this.SubcommandName);
+            var setup = Arrays.Rent(4);
+            LittleEndianWriter.WriteUInt16(setup, 0, (ushort)SubcommandName);
             LittleEndianWriter.WriteUInt16(setup, 2, Priority);
             return setup;
         }
 
-        public override byte[] GetData(bool isUnicode)
+        public override IMemoryOwner<byte> GetData(bool isUnicode)
         {
-            return WriteData;
+            return WriteData.AddOwner();
         }
 
-        public override TransactionSubcommandName SubcommandName
+        public override TransactionSubcommandName SubcommandName => TransactionSubcommandName.TRANS_CALL_NMPIPE;
+
+        public override void Dispose()
         {
-            get
-            {
-                return TransactionSubcommandName.TRANS_CALL_NMPIPE;
-            }
+            base.Dispose();
+            WriteData.Dispose();
+            WriteData = null;
         }
     }
 }

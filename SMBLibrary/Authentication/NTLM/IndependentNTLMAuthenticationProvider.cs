@@ -4,8 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using System.Security.Cryptography;
 using SMBLibrary.Authentication.GSSAPI;
 using Utilities;
@@ -17,7 +17,7 @@ namespace SMBLibrary.Authentication.NTLM
 
     public class IndependentNTLMAuthenticationProvider : NTLMAuthenticationProviderBase
     {
-        public class AuthContext
+        public class AuthContext : IDisposable
         {
             public byte[] ServerChallenge;
             public string DomainName;
@@ -30,6 +30,12 @@ namespace SMBLibrary.Authentication.NTLM
             public AuthContext(byte[] serverChallenge)
             {
                 ServerChallenge = serverChallenge;
+            }
+
+            public void Dispose()
+            {
+                if(ServerChallenge != null) ExactArrayPool.Return(ServerChallenge); ServerChallenge = null;
+                if(SessionKey != null) ExactArrayPool.Return(SessionKey); SessionKey = null;
             }
         }
 
@@ -63,7 +69,7 @@ namespace SMBLibrary.Authentication.NTLM
 
         public override NTStatus GetChallengeMessage(out object context, NegotiateMessage negotiateMessage, out ChallengeMessage challengeMessage)
         {
-            byte[] serverChallenge = GenerateServerChallenge();
+            var serverChallenge = GenerateServerChallenge();
             context = new AuthContext(serverChallenge);
 
             challengeMessage = new ChallengeMessage();
@@ -140,49 +146,130 @@ namespace SMBLibrary.Authentication.NTLM
 
         public override NTStatus Authenticate(object context, AuthenticateMessage message)
         {
-            AuthContext authContext = context as AuthContext;
-            if (authContext == null)
+            var authContext = context as AuthContext;
+            try
             {
-                // There are two possible reasons for authContext to be null:
-                // 1. We have a bug in our implementation, let's assume that's not the case,
-                //    according to [MS-SMB2] 3.3.5.5.1 we aren't allowed to return SEC_E_INVALID_HANDLE anyway.
-                // 2. The client sent AuthenticateMessage without sending NegotiateMessage first,
-                //    in this case the correct response is SEC_E_INVALID_TOKEN.
-                return NTStatus.SEC_E_INVALID_TOKEN;
-            }
-
-            authContext.DomainName = message.DomainName;
-            authContext.UserName = message.UserName;
-            authContext.WorkStation = message.WorkStation;
-            if (message.Version != null)
-            {
-                authContext.OSVersion = message.Version.ToString();
-            }
-
-            if ((message.NegotiateFlags & NegotiateFlags.Anonymous) > 0)
-            {
-                if (this.EnableGuestLogin)
+                if (authContext == null)
                 {
-                    authContext.IsGuest = true;
-                    return NTStatus.STATUS_SUCCESS;
+                    // There are two possible reasons for authContext to be null:
+                    // 1. We have a bug in our implementation, let's assume that's not the case,
+                    //    according to [MS-SMB2] 3.3.5.5.1 we aren't allowed to return SEC_E_INVALID_HANDLE anyway.
+                    // 2. The client sent AuthenticateMessage without sending NegotiateMessage first,
+                    //    in this case the correct response is SEC_E_INVALID_TOKEN.
+                    return NTStatus.SEC_E_INVALID_TOKEN;
+                }
+
+                authContext.DomainName = message.DomainName;
+                authContext.UserName = message.UserName;
+                authContext.WorkStation = message.WorkStation;
+                if (message.Version != null)
+                {
+                    authContext.OSVersion = message.Version.ToString();
+                }
+
+                if ((message.NegotiateFlags & NegotiateFlags.Anonymous) > 0)
+                {
+                    if (EnableGuestLogin)
+                    {
+                        authContext.IsGuest = true;
+                        return NTStatus.STATUS_SUCCESS;
+                    }
+                    else
+                    {
+                        return NTStatus.STATUS_LOGON_FAILURE;
+                    }
+                }
+
+                if (!m_loginCounter.HasRemainingLoginAttempts(message.UserName.ToLower()))
+                {
+                    return NTStatus.STATUS_ACCOUNT_LOCKED_OUT;
+                }
+
+                var password = m_GetUserPassword(message.UserName);
+                if (password == null)
+                {
+                    if (EnableGuestLogin)
+                    {
+                        authContext.IsGuest = true;
+                        return NTStatus.STATUS_SUCCESS;
+                    }
+                    else
+                    {
+                        if (m_loginCounter.HasRemainingLoginAttempts(message.UserName.ToLower(), true))
+                        {
+                            return NTStatus.STATUS_LOGON_FAILURE;
+                        }
+                        else
+                        {
+                            return NTStatus.STATUS_ACCOUNT_LOCKED_OUT;
+                        }
+                    }
+                }
+
+                bool success;
+                var serverChallenge = authContext.ServerChallenge;
+                byte[] sessionBaseKey;
+                byte[] keyExchangeKey = null;
+                if ((message.NegotiateFlags & NegotiateFlags.ExtendedSessionSecurity) > 0)
+                {
+                    if (AuthenticationMessageUtils.IsNTLMv1ExtendedSessionSecurity(message.LmChallengeResponse.Memory.Span))
+                    {
+                        // NTLM v1 Extended Session Security:
+                        success = AuthenticateV1Extended(password, serverChallenge, message.LmChallengeResponse.Memory.Span, message.NtChallengeResponse.Memory.Span);
+                        if (success)
+                        {
+                            // https://msdn.microsoft.com/en-us/library/cc236699.aspx
+                            var ntowf = NTLMCryptography.NTOWFv1_Rental(password);
+                            sessionBaseKey = Md4.GetByteHashFromBytes_Rental(ntowf);
+                            ExactArrayPool.Return(ntowf);
+                            
+                            var lmowf = NTLMCryptography.LMOWFv1(password);
+                            keyExchangeKey = NTLMCryptography.KXKey_Rental(sessionBaseKey, message.NegotiateFlags, message.LmChallengeResponse.Memory.Span, serverChallenge, lmowf);
+                            ExactArrayPool.Return(sessionBaseKey);
+                        }
+                    }
+                    else
+                    {
+                        // NTLM v2:
+                        success = AuthenticateV2(message.DomainName, message.UserName, password, serverChallenge, message.LmChallengeResponse.Memory.Span, message.NtChallengeResponse.Memory.Span);
+                        if (success)
+                        {
+                            // https://msdn.microsoft.com/en-us/library/cc236700.aspx
+                            var responseKeyNT = NTLMCryptography.NTOWFv2(password, message.UserName, message.DomainName);
+                            var ntProofStr = ByteReader.ReadBytes_RentArray(message.NtChallengeResponse.Memory.Span, 0, 16);
+                            sessionBaseKey = new HMACMD5(responseKeyNT).ComputeHash(ntProofStr);
+                            keyExchangeKey = sessionBaseKey;
+                        }
+                    }
                 }
                 else
                 {
-                    return NTStatus.STATUS_LOGON_FAILURE;
+                    success = AuthenticateV1(password, serverChallenge, message.LmChallengeResponse.Memory.Span, message.NtChallengeResponse.Memory.Span);
+                    if (success)
+                    {
+                        // https://msdn.microsoft.com/en-us/library/cc236699.aspx
+                        var ntowf = NTLMCryptography.NTOWFv1_Rental(password);
+                        sessionBaseKey = Md4.GetByteHashFromBytes_Rental(ntowf);
+                        ExactArrayPool.Return(ntowf);
+                        
+                        var lmowf = NTLMCryptography.LMOWFv1(password);
+                        keyExchangeKey = NTLMCryptography.KXKey_Rental(sessionBaseKey, message.NegotiateFlags, message.LmChallengeResponse.Memory.Span, serverChallenge, lmowf);
+                        ExactArrayPool.Return(sessionBaseKey);
+                    }
                 }
-            }
 
-            if (!m_loginCounter.HasRemainingLoginAttempts(message.UserName.ToLower()))
-            {
-                return NTStatus.STATUS_ACCOUNT_LOCKED_OUT;
-            }
-
-            string password = m_GetUserPassword(message.UserName);
-            if (password == null)
-            {
-                if (this.EnableGuestLogin)
+                if (success)
                 {
-                    authContext.IsGuest = true;
+                    // https://msdn.microsoft.com/en-us/library/cc236676.aspx
+                    // https://blogs.msdn.microsoft.com/openspecification/2010/04/19/ntlm-keys-and-sundry-stuff/
+                    if ((message.NegotiateFlags & NegotiateFlags.KeyExchange) > 0)
+                    {
+                        authContext.SessionKey = RC4.Decrypt(keyExchangeKey, message.EncryptedRandomSessionKey.Memory.ToArray());
+                    }
+                    else
+                    {
+                        authContext.SessionKey = keyExchangeKey;
+                    }
                     return NTStatus.STATUS_SUCCESS;
                 }
                 else
@@ -197,74 +284,11 @@ namespace SMBLibrary.Authentication.NTLM
                     }
                 }
             }
-
-            bool success;
-            byte[] serverChallenge = authContext.ServerChallenge;
-            byte[] sessionBaseKey;
-            byte[] keyExchangeKey = null;
-            if ((message.NegotiateFlags & NegotiateFlags.ExtendedSessionSecurity) > 0)
+            finally
             {
-                if (AuthenticationMessageUtils.IsNTLMv1ExtendedSessionSecurity(message.LmChallengeResponse))
+                if (authContext != null)
                 {
-                    // NTLM v1 Extended Session Security:
-                    success = AuthenticateV1Extended(password, serverChallenge, message.LmChallengeResponse, message.NtChallengeResponse);
-                    if (success)
-                    {
-                        // https://msdn.microsoft.com/en-us/library/cc236699.aspx
-                        sessionBaseKey = new MD4().GetByteHashFromBytes(NTLMCryptography.NTOWFv1(password));
-                        byte[] lmowf = NTLMCryptography.LMOWFv1(password);
-                        keyExchangeKey = NTLMCryptography.KXKey(sessionBaseKey, message.NegotiateFlags, message.LmChallengeResponse, serverChallenge, lmowf);
-                    }
-                }
-                else
-                {
-                    // NTLM v2:
-                    success = AuthenticateV2(message.DomainName, message.UserName, password, serverChallenge, message.LmChallengeResponse, message.NtChallengeResponse);
-                    if (success)
-                    {
-                        // https://msdn.microsoft.com/en-us/library/cc236700.aspx
-                        byte[] responseKeyNT = NTLMCryptography.NTOWFv2(password, message.UserName, message.DomainName);
-                        byte[] ntProofStr = ByteReader.ReadBytes(message.NtChallengeResponse, 0, 16);
-                        sessionBaseKey = new HMACMD5(responseKeyNT).ComputeHash(ntProofStr);
-                        keyExchangeKey = sessionBaseKey;
-                    }
-                }
-            }
-            else
-            {
-                success = AuthenticateV1(password, serverChallenge, message.LmChallengeResponse, message.NtChallengeResponse);
-                if (success)
-                {
-                    // https://msdn.microsoft.com/en-us/library/cc236699.aspx
-                    sessionBaseKey = new MD4().GetByteHashFromBytes(NTLMCryptography.NTOWFv1(password));
-                    byte[] lmowf = NTLMCryptography.LMOWFv1(password);
-                    keyExchangeKey = NTLMCryptography.KXKey(sessionBaseKey, message.NegotiateFlags, message.LmChallengeResponse, serverChallenge, lmowf);
-                }
-            }
-
-            if (success)
-            {
-                // https://msdn.microsoft.com/en-us/library/cc236676.aspx
-                // https://blogs.msdn.microsoft.com/openspecification/2010/04/19/ntlm-keys-and-sundry-stuff/
-                if ((message.NegotiateFlags & NegotiateFlags.KeyExchange) > 0)
-                {
-                    authContext.SessionKey = RC4.Decrypt(keyExchangeKey, message.EncryptedRandomSessionKey);
-                }
-                else
-                {
-                    authContext.SessionKey = keyExchangeKey;
-                }
-                return NTStatus.STATUS_SUCCESS;
-            }
-            else
-            {
-                if (m_loginCounter.HasRemainingLoginAttempts(message.UserName.ToLower(), true))
-                {
-                    return NTStatus.STATUS_LOGON_FAILURE;
-                }
-                else
-                {
-                    return NTStatus.STATUS_ACCOUNT_LOCKED_OUT;
+                    ExactArrayPool.Return(authContext.SessionKey);
                 }
             }
         }
@@ -277,7 +301,7 @@ namespace SMBLibrary.Authentication.NTLM
 
         public override object GetContextAttribute(object context, GSSAttributeName attributeName)
         {
-            AuthContext authContext = context as AuthContext;
+            var authContext = context as AuthContext;
             if (authContext != null)
             {
                 switch (attributeName)
@@ -300,63 +324,93 @@ namespace SMBLibrary.Authentication.NTLM
             return null;
         }
 
-        private bool EnableGuestLogin
-        {
-            get
-            {
-                return (m_GetUserPassword("Guest") == String.Empty);
-            }
-        }
+        private bool EnableGuestLogin => (m_GetUserPassword("Guest") == String.Empty);
 
         /// <summary>
         /// LM v1 / NTLM v1
         /// </summary>
-        private static bool AuthenticateV1(string password, byte[] serverChallenge, byte[] lmResponse, byte[] ntResponse)
+        private static bool AuthenticateV1(string password, Span<byte> serverChallenge, Span<byte> lmResponse, Span<byte> ntResponse)
         {
-            byte[] expectedLMResponse = NTLMCryptography.ComputeLMv1Response(serverChallenge, password);
-            if (ByteUtils.AreByteArraysEqual(expectedLMResponse, lmResponse))
+            var expectedLMResponse = NTLMCryptography.ComputeLMv1Response(serverChallenge, password);
+            try
             {
-                return true;
+                if (ByteUtils.AreByteArraysEqual(expectedLMResponse, lmResponse))
+                {
+                    return true;
+                }
+            }
+            finally
+            {
+                ExactArrayPool.Return(expectedLMResponse);
             }
 
-            byte[] expectedNTResponse = NTLMCryptography.ComputeNTLMv1Response(serverChallenge, password);
-            return ByteUtils.AreByteArraysEqual(expectedNTResponse, ntResponse);
+            var expectedNTResponse = NTLMCryptography.ComputeNTLMv1Response(serverChallenge, password);
+            try
+            {
+                return ByteUtils.AreByteArraysEqual(expectedNTResponse, ntResponse);
+            }
+            finally
+            {
+                ExactArrayPool.Return(expectedNTResponse);
+            }
+
         }
 
         /// <summary>
         /// LM v1 / NTLM v1 Extended Session Security
         /// </summary>
-        private static bool AuthenticateV1Extended(string password, byte[] serverChallenge, byte[] lmResponse, byte[] ntResponse)
+        private static bool AuthenticateV1Extended(string password, byte[] serverChallenge, Span<byte> lmResponse, Span<byte> ntResponse)
         {
-            byte[] clientChallenge = ByteReader.ReadBytes(lmResponse, 0, 8);
-            byte[] expectedNTLMv1Response = NTLMCryptography.ComputeNTLMv1ExtendedSessionSecurityResponse(serverChallenge, clientChallenge, password);
-
-            return ByteUtils.AreByteArraysEqual(expectedNTLMv1Response, ntResponse);
+            var clientChallenge = ByteReader.ReadBytes_RentArray(lmResponse, 0, 8);
+            var expectedNTLMv1Response = NTLMCryptography.ComputeNTLMv1ExtendedSessionSecurityResponse(serverChallenge, clientChallenge, password);
+            try
+            {
+                return ByteUtils.AreByteArraysEqual(expectedNTLMv1Response, ntResponse);
+            }
+            finally
+            {
+                ExactArrayPool.Return(clientChallenge, expectedNTLMv1Response);
+            }
         }
 
         /// <summary>
         /// LM v2 / NTLM v2
         /// </summary>
-        private bool AuthenticateV2(string domainName, string accountName, string password, byte[] serverChallenge, byte[] lmResponse, byte[] ntResponse)
+        private bool AuthenticateV2(string domainName, string accountName, string password, Span<byte> serverChallenge, Span<byte> lmResponse, Span<byte> ntResponse)
         {
             // Note: Linux CIFS VFS 3.10 will send LmChallengeResponse with length of 0 bytes
             if (lmResponse.Length == 24)
             {
-                byte[] _LMv2ClientChallenge = ByteReader.ReadBytes(lmResponse, 16, 8);
-                byte[] expectedLMv2Response = NTLMCryptography.ComputeLMv2Response(serverChallenge, _LMv2ClientChallenge, password, accountName, domainName);
-                if (ByteUtils.AreByteArraysEqual(expectedLMv2Response, lmResponse))
+                var _LMv2ClientChallenge = ByteReader.ReadBytes_RentArray(lmResponse, 16, 8);
+                var expectedLMv2Response = NTLMCryptography.ComputeLMv2Response(serverChallenge, _LMv2ClientChallenge, password, accountName, domainName);
+                try
                 {
-                    return true;
+                    if (ByteUtils.AreByteArraysEqual(expectedLMv2Response, lmResponse))
+                    {
+                        return true;
+                    }
+
+                }
+                finally
+                {
+                    ExactArrayPool.Return(_LMv2ClientChallenge, expectedLMv2Response);
                 }
             }
 
             if (AuthenticationMessageUtils.IsNTLMv2NTResponse(ntResponse))
             {
-                byte[] clientNTProof = ByteReader.ReadBytes(ntResponse, 0, 16);
-                byte[] clientChallengeStructurePadded = ByteReader.ReadBytes(ntResponse, 16, ntResponse.Length - 16);
-                byte[] expectedNTProof = NTLMCryptography.ComputeNTLMv2Proof(serverChallenge, clientChallengeStructurePadded, password, accountName, domainName);
+                var clientNTProof = ByteReader.ReadBytes_RentArray(ntResponse, 0, 16);
+                var clientChallengeStructurePadded = ByteReader.ReadBytes_RentArray(ntResponse, 16, ntResponse.Length - 16);
+                var expectedNTProof = NTLMCryptography.ComputeNTLMv2Proof(serverChallenge, clientChallengeStructurePadded, password, accountName, domainName);
 
-                return ByteUtils.AreByteArraysEqual(clientNTProof, expectedNTProof);
+                try
+                {
+                    return ByteUtils.AreByteArraysEqual(clientNTProof, expectedNTProof);
+                }
+                finally
+                {
+                    ExactArrayPool.Return(clientNTProof, clientChallengeStructurePadded);
+                }
             }
             return false;
         }
@@ -366,8 +420,8 @@ namespace SMBLibrary.Authentication.NTLM
         /// </summary>
         private static byte[] GenerateServerChallenge()
         {
-            byte[] serverChallenge = new byte[8];
-            new Random().NextBytes(serverChallenge);
+            var serverChallenge = ExactArrayPool.Rent(8);
+            StaticRandom.Instance.NextBytes(serverChallenge);
             return serverChallenge;
         }
     }

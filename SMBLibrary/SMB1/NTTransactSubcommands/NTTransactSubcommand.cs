@@ -4,32 +4,29 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.IO;
-using Utilities;
+using MemoryPools.Memory;
 
 namespace SMBLibrary.SMB1
 {
-    public abstract class NTTransactSubcommand
+    public abstract class NTTransactSubcommand : IDisposable
     {
-        public NTTransactSubcommand()
+        public virtual IMemoryOwner<byte> GetSetup()
         {
+            return MemoryOwner<byte>.Empty;
         }
 
-        public virtual byte[] GetSetup()
+        public virtual IMemoryOwner<byte> GetParameters(bool isUnicode)
         {
-            return new byte[0];
+            return MemoryOwner<byte>.Empty;
         }
 
-        public virtual byte[] GetParameters(bool isUnicode)
+        public virtual IMemoryOwner<byte> GetData()
         {
-            return new byte[0];
-        }
-
-        public virtual byte[] GetData()
-        {
-            return new byte[0];
+            return MemoryOwner<byte>.Empty;
         }
 
         public abstract NTTransactSubcommandName SubcommandName
@@ -37,7 +34,7 @@ namespace SMBLibrary.SMB1
             get;
         }
 
-        public static NTTransactSubcommand GetSubcommandRequest(NTTransactSubcommandName subcommandName, byte[] setup, byte[] parameters, byte[] data, bool isUnicode)
+        public static NTTransactSubcommand GetSubcommandRequest(NTTransactSubcommandName subcommandName, IMemoryOwner<byte> setup, IMemoryOwner<byte> parameters, IMemoryOwner<byte> data, bool isUnicode)
         {
             switch (subcommandName)
             {
@@ -46,13 +43,18 @@ namespace SMBLibrary.SMB1
                 case NTTransactSubcommandName.NT_TRANSACT_IOCTL:
                     return new NTTransactIOCTLRequest(setup, data);
                 case NTTransactSubcommandName.NT_TRANSACT_SET_SECURITY_DESC:
-                    return new NTTransactSetSecurityDescriptorRequest(parameters, data);
+                    return new NTTransactSetSecurityDescriptorRequest(parameters.Memory.Span, data.Memory.Span);
                 case NTTransactSubcommandName.NT_TRANSACT_NOTIFY_CHANGE:
-                    return new NTTransactNotifyChangeRequest(setup);
+                    return new NTTransactNotifyChangeRequest(setup.Memory.Span);
                 case NTTransactSubcommandName.NT_TRANSACT_QUERY_SECURITY_DESC:
-                    return new NTTransactQuerySecurityDescriptorRequest(parameters);
+                    return new NTTransactQuerySecurityDescriptorRequest(parameters.Memory.Span);
             }
             throw new InvalidDataException();
+        }
+
+        public virtual void Dispose()
+        {
+            
         }
     }
 }

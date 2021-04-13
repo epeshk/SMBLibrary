@@ -4,7 +4,7 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
+
 using SMBLibrary.RPC;
 
 namespace SMBLibrary.Services
@@ -61,7 +61,7 @@ namespace SMBLibrary.Services
 
         public uint ToUInt32()
         {
-            uint shareTypeExtended = (uint)ShareType;
+            var shareTypeExtended = (uint)ShareType;
             if (IsSpecial)
             {
                 shareTypeExtended |= 0x80000000;

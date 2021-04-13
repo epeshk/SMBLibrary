@@ -4,9 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.Authentication.NTLM
@@ -33,7 +32,7 @@ namespace SMBLibrary.Authentication.NTLM
             NTLMRevisionCurrent = ntlmRevisionCurrent;
         }
 
-        public NTLMVersion(byte[] buffer, int offset)
+        public NTLMVersion(Span<byte> buffer, int offset)
         {
             ProductMajorVersion = ByteReader.ReadByte(buffer, offset + 0);
             ProductMinorVersion = ByteReader.ReadByte(buffer, offset + 1);
@@ -41,12 +40,12 @@ namespace SMBLibrary.Authentication.NTLM
             NTLMRevisionCurrent = ByteReader.ReadByte(buffer, offset + 7);
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
-            ByteWriter.WriteByte(buffer, offset + 0, ProductMajorVersion);
-            ByteWriter.WriteByte(buffer, offset + 1, ProductMinorVersion);
+            BufferWriter.WriteByte(buffer, offset + 0, ProductMajorVersion);
+            BufferWriter.WriteByte(buffer, offset + 1, ProductMinorVersion);
             LittleEndianWriter.WriteUInt16(buffer, offset + 2, ProductBuild);
-            ByteWriter.WriteByte(buffer, offset + 7, NTLMRevisionCurrent);
+            BufferWriter.WriteByte(buffer, offset + 7, NTLMRevisionCurrent);
         }
 
         public override string ToString()
@@ -54,20 +53,8 @@ namespace SMBLibrary.Authentication.NTLM
             return String.Format("{0}.{1}.{2}", ProductMajorVersion, ProductMinorVersion, ProductBuild);
         }
 
-        public static NTLMVersion WindowsXP
-        {
-            get
-            {
-                return new NTLMVersion(5, 1, 2600, NTLMSSP_REVISION_W2K3);
-            }
-        }
+        public static NTLMVersion WindowsXP => new NTLMVersion(5, 1, 2600, NTLMSSP_REVISION_W2K3);
 
-        public static NTLMVersion Server2003
-        {
-            get
-            {
-                return new NTLMVersion(5, 2, 3790, NTLMSSP_REVISION_W2K3);
-            }
-        }
+        public static NTLMVersion Server2003 => new NTLMVersion(5, 2, 3790, NTLMSSP_REVISION_W2K3);
     }
 }

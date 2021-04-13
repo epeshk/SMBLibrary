@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -27,7 +28,7 @@ namespace SMBLibrary.SMB1
         {
         }
 
-        public QueryFSSizeInfo(byte[] buffer, int offset)
+        public QueryFSSizeInfo(Span<byte> buffer, int offset)
         {
             TotalAllocationUnits = LittleEndianConverter.ToInt64(buffer, 0);
             TotalFreeAllocationUnits = LittleEndianConverter.ToInt64(buffer, 8);
@@ -35,30 +36,18 @@ namespace SMBLibrary.SMB1
             BytesPerSector = LittleEndianConverter.ToUInt32(buffer, 20);
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            byte[] buffer = new byte[Length];
-            LittleEndianWriter.WriteInt64(buffer, 0, TotalAllocationUnits);
-            LittleEndianWriter.WriteInt64(buffer, 8, TotalFreeAllocationUnits);
-            LittleEndianWriter.WriteUInt32(buffer, 16, SectorsPerAllocationUnit);
-            LittleEndianWriter.WriteUInt32(buffer, 20, BytesPerSector);
+            var buffer = Arrays.Rent(Length);
+            LittleEndianWriter.WriteInt64(buffer.Memory.Span, 0, TotalAllocationUnits);
+            LittleEndianWriter.WriteInt64(buffer.Memory.Span, 8, TotalFreeAllocationUnits);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, 16, SectorsPerAllocationUnit);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, 20, BytesPerSector);
             return buffer;
         }
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength;
-            }
-        }
+        public override int Length => FixedLength;
 
-        public override QueryFSInformationLevel InformationLevel
-        {
-            get
-            {
-                return QueryFSInformationLevel.SMB_QUERY_FS_SIZE_INFO;
-            }
-        }
+        public override QueryFSInformationLevel InformationLevel => QueryFSInformationLevel.SMB_QUERY_FS_SIZE_INFO;
     }
 }

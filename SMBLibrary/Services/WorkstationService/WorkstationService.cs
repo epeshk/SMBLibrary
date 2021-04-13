@@ -4,9 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
 
 namespace SMBLibrary.Services
 {
@@ -34,13 +34,13 @@ namespace SMBLibrary.Services
             m_verMinor = 2;
         }
 
-        public override byte[] GetResponseBytes(ushort opNum, byte[] requestBytes)
+        public override IMemoryOwner<byte> GetResponseBytes(ushort opNum, IMemoryOwner<byte> requestBytes)
         {
             switch ((WorkstationServiceOpName)opNum)
             {
                 case WorkstationServiceOpName.NetrWkstaGetInfo:
-                    NetrWkstaGetInfoRequest request = new NetrWkstaGetInfoRequest(requestBytes);
-                    NetrWkstaGetInfoResponse response = GetNetrWkstaGetInfoResponse(request);
+                    var request = new NetrWkstaGetInfoRequest(requestBytes);
+                    var response = GetNetrWkstaGetInfoResponse(request);
                     return response.GetBytes();
                 default:
                     throw new UnsupportedOpNumException();
@@ -49,12 +49,12 @@ namespace SMBLibrary.Services
 
         public NetrWkstaGetInfoResponse GetNetrWkstaGetInfoResponse(NetrWkstaGetInfoRequest request)
         {
-            NetrWkstaGetInfoResponse response = new NetrWkstaGetInfoResponse();
+            var response = new NetrWkstaGetInfoResponse();
             switch (request.Level)
             {
                 case 100:
                     {
-                        WorkstationInfo100 info = new WorkstationInfo100();
+                        var info = new WorkstationInfo100();
                         info.PlatformID = m_platformID;
                         info.ComputerName.Value = m_computerName;
                         info.LanGroup.Value = m_lanGroup;
@@ -66,7 +66,7 @@ namespace SMBLibrary.Services
                     }
                 case 101:
                     {
-                        WorkstationInfo101 info = new WorkstationInfo101();
+                        var info = new WorkstationInfo101();
                         info.PlatformID = m_platformID;
                         info.ComputerName.Value = m_computerName;
                         info.LanGroup.Value = m_lanGroup;
@@ -93,20 +93,8 @@ namespace SMBLibrary.Services
             }
         }
 
-        public override Guid InterfaceGuid
-        {
-            get
-            {
-                return ServiceInterfaceGuid;
-            }
-        }
+        public override Guid InterfaceGuid => ServiceInterfaceGuid;
 
-        public override string PipeName
-        {
-            get
-            {
-                return ServicePipeName;
-            }
-        }
+        public override string PipeName => ServicePipeName;
     }
 }

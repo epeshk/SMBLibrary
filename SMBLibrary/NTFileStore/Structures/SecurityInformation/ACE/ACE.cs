@@ -4,9 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary
@@ -16,16 +15,16 @@ namespace SMBLibrary
     /// </summary>
     public abstract class ACE
     {
-        public abstract void WriteBytes(byte[] buffer, ref int offset);
+        public abstract void WriteBytes(Span<byte> buffer, ref int offset);
 
         public abstract int Length
         {
             get;
         }
 
-        public static ACE GetAce(byte[] buffer, int offset)
+        public static ACE GetAce(Span<byte> buffer, int offset)
         {
-            AceType aceType = (AceType)ByteReader.ReadByte(buffer, offset + 0);
+            var aceType = (AceType)ByteReader.ReadByte(buffer, offset + 0);
             switch (aceType)
             {
                 case AceType.ACCESS_ALLOWED_ACE_TYPE:

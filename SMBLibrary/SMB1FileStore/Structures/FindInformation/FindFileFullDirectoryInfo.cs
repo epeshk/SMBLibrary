@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -29,13 +30,13 @@ namespace SMBLibrary.SMB1
         public ExtendedFileAttributes ExtFileAttributes;
         //uint FileNameLength; // In bytes, MUST exclude the null termination.
         public uint EASize;
-        public string FileName; // OEM / Unicode character array. MUST be written as SMB_STRING, and read as fixed length string.
+        public IMemoryOwner<char> FileName; // OEM / Unicode character array. MUST be written as SMB_STRING, and read as fixed length string.
 
-        public FindFileFullDirectoryInfo() : base()
+        public FindFileFullDirectoryInfo()
         {
         }
 
-        public FindFileFullDirectoryInfo(byte[] buffer, int offset, bool isUnicode) : base()
+        public FindFileFullDirectoryInfo(Span<byte> buffer, int offset, bool isUnicode)
         {
             NextEntryOffset = LittleEndianReader.ReadUInt32(buffer, ref offset);
             FileIndex = LittleEndianReader.ReadUInt32(buffer, ref offset);
@@ -45,15 +46,16 @@ namespace SMBLibrary.SMB1
             LastAttrChangeTime = FileTimeHelper.ReadNullableFileTime(buffer, ref offset);
             EndOfFile = LittleEndianReader.ReadInt64(buffer, ref offset);
             AllocationSize = LittleEndianReader.ReadInt64(buffer, ref offset);
-            ExtFileAttributes = (ExtendedFileAttributes)LittleEndianReader.ReadUInt32(buffer, ref offset);
-            uint fileNameLength = LittleEndianReader.ReadUInt32(buffer, ref offset);
+            ExtFileAttributes = LittleEndianReader.ReadUInt32(buffer, ref offset);
+            var fileNameLength = LittleEndianReader.ReadUInt32(buffer, ref offset);
             EASize = LittleEndianReader.ReadUInt32(buffer, ref offset);
-            FileName = SMB1Helper.ReadFixedLengthString(buffer, ref offset, isUnicode, (int)fileNameLength);
+            FileName = Arrays.Rent<char>((int) fileNameLength); 
+            SMB1Helper.ReadFixedLengthString(FileName.Memory.Span, buffer, ref offset, isUnicode, (int)fileNameLength);
         }
 
-        public override void WriteBytes(byte[] buffer, ref int offset, bool isUnicode)
+        public override void WriteBytes(Span<byte> buffer, ref int offset, bool isUnicode)
         {
-            uint fileNameLength = (byte)(isUnicode ? FileName.Length * 2 : FileName.Length);
+            uint fileNameLength = (byte)(isUnicode ? FileName.Memory.Length * 2 : FileName.Memory.Length);
 
             LittleEndianWriter.WriteUInt32(buffer, ref offset, NextEntryOffset);
             LittleEndianWriter.WriteUInt32(buffer, ref offset, FileIndex);
@@ -66,30 +68,24 @@ namespace SMBLibrary.SMB1
             LittleEndianWriter.WriteUInt32(buffer, ref offset, (uint)ExtFileAttributes);
             LittleEndianWriter.WriteUInt32(buffer, ref offset, fileNameLength);
             LittleEndianWriter.WriteUInt32(buffer, ref offset, EASize);
-            SMB1Helper.WriteSMBString(buffer, ref offset, isUnicode, FileName);
+            SMB1Helper.WriteSMBString(buffer, ref offset, isUnicode, FileName.Memory.Span);
         }
 
         public override int GetLength(bool isUnicode)
         {
-            int length = FixedLength;
+            var length = FixedLength;
 
             if (isUnicode)
             {
-                length += FileName.Length * 2 + 2;
+                length += FileName.Memory.Length * 2 + 2;
             }
             else
             {
-                length += FileName.Length + 1;
+                length += FileName.Memory.Length + 1;
             }
             return length;
         }
 
-        public override FindInformationLevel InformationLevel
-        {
-            get
-            {
-                return FindInformationLevel.SMB_FIND_FILE_FULL_DIRECTORY_INFO;
-            }
-        }
+        public override FindInformationLevel InformationLevel => FindInformationLevel.SMB_FIND_FILE_FULL_DIRECTORY_INFO;
     }
 }

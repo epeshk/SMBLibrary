@@ -4,9 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -17,29 +17,34 @@ namespace SMBLibrary.SMB1
         public byte AndXReserved;
         public ushort AndXOffset;
 
-        public SMBAndXCommand() : base()
+        public override SMB1Command Init()
         {
+            base.Init();
+            return this;
         }
 
-        public SMBAndXCommand(byte[] buffer, int offset, bool isUnicode) : base(buffer, offset, isUnicode)
+        public override SMB1Command Init(Span<byte> buffer, int offset, bool isUnicode)
         {
-            AndXCommand = (CommandName)ByteReader.ReadByte(this.SMBParameters, 0);
-            AndXReserved = ByteReader.ReadByte(this.SMBParameters, 1);
-            AndXOffset = LittleEndianConverter.ToUInt16(this.SMBParameters, 2);
+            base.Init(buffer, offset, isUnicode);
+            AndXCommand = (CommandName)ByteReader.ReadByte(SmbParameters.Memory.Span, 0);
+            AndXReserved = ByteReader.ReadByte(SmbParameters.Memory.Span, 1);
+            AndXOffset = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 2);
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            ByteWriter.WriteByte(this.SMBParameters, 0, (byte)AndXCommand);
-            ByteWriter.WriteByte(this.SMBParameters, 1, AndXReserved);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 2, AndXOffset);
+            BufferWriter.WriteByte(SmbParameters.Memory.Span, 0, (byte)AndXCommand);
+            BufferWriter.WriteByte(SmbParameters.Memory.Span, 1, AndXReserved);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 2, AndXOffset);
             return base.GetBytes(isUnicode);
         }
 
-        public static void WriteAndXOffset(byte[] buffer, int commandOffset, ushort AndXOffset)
+        public static void WriteAndXOffset(Span<byte> buffer, int commandOffset, ushort andXOffset)
         {
             // 3 preceding bytes: WordCount, AndXCommand and AndXReserved
-            LittleEndianWriter.WriteUInt16(buffer, commandOffset + 3, AndXOffset);
+            LittleEndianWriter.WriteUInt16(buffer, commandOffset + 3, andXOffset);
         }
     }
 }

@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -34,69 +35,80 @@ namespace SMBLibrary.SMB1
         public string DomainName; // SMB_STRING (If Unicode, this field MUST be aligned to start on a 2-byte boundary from the start of the SMB header)
         public string ServerName; // SMB_STRING (this field WILL be aligned to start on a 2-byte boundary from the start of the SMB header)
 
-        public NegotiateResponse() : base()
+        public override SMB1Command Init()
         {
-            Challenge = new byte[0];
+            base.Init();
+            DialectIndex = default;
+            SecurityMode = default;
+            MaxMpxCount = default;
+            MaxNumberVcs = default;
+            MaxBufferSize = default;
+            MaxRawSize = default;
+            SessionKey = default;
+            Capabilities = default;
+            SystemTime = default;
+            ServerTimeZone = default;
+            ChallengeLength = default;
+            Challenge = Array.Empty<byte>();
             DomainName = String.Empty;
             ServerName = String.Empty;
+
+            return this;
         }
 
-        public NegotiateResponse(byte[] buffer, int offset, bool isUnicode) : base(buffer, offset, isUnicode)
+        public override SMB1Command Init(Span<byte> buffer, int offset, bool isUnicode)
         {
-            DialectIndex = LittleEndianConverter.ToUInt16(this.SMBParameters, 0);
-            SecurityMode = (SecurityMode)ByteReader.ReadByte(this.SMBParameters, 2);
-            MaxMpxCount = LittleEndianConverter.ToUInt16(this.SMBParameters, 3);
-            MaxNumberVcs = LittleEndianConverter.ToUInt16(this.SMBParameters, 5);
-            MaxBufferSize = LittleEndianConverter.ToUInt32(this.SMBParameters, 7);
-            MaxRawSize = LittleEndianConverter.ToUInt32(this.SMBParameters, 11);
-            SessionKey = LittleEndianConverter.ToUInt32(this.SMBParameters, 15);
-            Capabilities = (Capabilities)LittleEndianConverter.ToUInt32(this.SMBParameters, 19);
-            SystemTime = FileTimeHelper.ReadFileTime(this.SMBParameters, 23);
-            ServerTimeZone = LittleEndianConverter.ToInt16(this.SMBParameters, 31);
-            ChallengeLength = ByteReader.ReadByte(this.SMBParameters, 33);
+            base.Init(buffer, offset, isUnicode);
+            DialectIndex = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 0);
+            SecurityMode = (SecurityMode)ByteReader.ReadByte(SmbParameters.Memory.Span, 2);
+            MaxMpxCount = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 3);
+            MaxNumberVcs = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 5);
+            MaxBufferSize = LittleEndianConverter.ToUInt32(SmbParameters.Memory.Span, 7);
+            MaxRawSize = LittleEndianConverter.ToUInt32(SmbParameters.Memory.Span, 11);
+            SessionKey = LittleEndianConverter.ToUInt32(SmbParameters.Memory.Span, 15);
+            Capabilities = (Capabilities)LittleEndianConverter.ToUInt32(SmbParameters.Memory.Span, 19);
+            SystemTime = FileTimeHelper.ReadFileTime(SmbParameters.Memory.Span, 23);
+            ServerTimeZone = LittleEndianConverter.ToInt16(SmbParameters.Memory.Span, 31);
+            ChallengeLength = ByteReader.ReadByte(SmbParameters.Memory.Span, 33);
 
-            int dataOffset = 0;
-            Challenge = ByteReader.ReadBytes(this.SMBData, ref dataOffset, ChallengeLength);
+            var dataOffset = 0;
+            Challenge = ByteReader.ReadBytes_RentArray(SmbData.Memory.Span, ref dataOffset, ChallengeLength);
             // [MS-CIFS] <90> Padding is not added before DomainName
             // DomainName and ServerName are always in Unicode
-            DomainName = SMB1Helper.ReadSMBString(this.SMBData, ref dataOffset, true);
-            ServerName = SMB1Helper.ReadSMBString(this.SMBData, ref dataOffset, true);
+            DomainName = SMB1Helper.ReadSMBString(SmbData.Memory.Span, ref dataOffset, true);
+            ServerName = SMB1Helper.ReadSMBString(SmbData.Memory.Span, ref dataOffset, true);
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            ChallengeLength = (byte)this.Challenge.Length;
+            ChallengeLength = (byte)Challenge.Length;
 
-            this.SMBParameters = new byte[ParametersLength];
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 0, DialectIndex);
-            ByteWriter.WriteByte(this.SMBParameters, 2, (byte)SecurityMode);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 3, MaxMpxCount);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 5, MaxNumberVcs);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, 7, MaxBufferSize);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, 11, MaxRawSize);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, 15, SessionKey);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, 19, (uint)Capabilities);
-            FileTimeHelper.WriteFileTime(this.SMBParameters, 23, SystemTime);
-            LittleEndianWriter.WriteInt16(this.SMBParameters, 31, ServerTimeZone);
-            ByteWriter.WriteByte(this.SMBParameters, 33, ChallengeLength);
+            SmbParameters = Arrays.Rent(ParametersLength);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 0, DialectIndex);
+            BufferWriter.WriteByte(SmbParameters.Memory.Span, 2, (byte)SecurityMode);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 3, MaxMpxCount);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 5, MaxNumberVcs);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, 7, MaxBufferSize);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, 11, MaxRawSize);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, 15, SessionKey);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, 19, (uint)Capabilities);
+            FileTimeHelper.WriteFileTime(SmbParameters.Memory.Span, 23, SystemTime);
+            LittleEndianWriter.WriteInt16(SmbParameters.Memory.Span, 31, ServerTimeZone);
+            BufferWriter.WriteByte(SmbParameters.Memory.Span, 33, ChallengeLength);
 
             // [MS-CIFS] <90> Padding is not added before DomainName
             // DomainName and ServerName are always in Unicode
-            this.SMBData = new byte[Challenge.Length + (DomainName.Length + 1) * 2 + (ServerName.Length + 1) * 2];
-            int offset = 0;
-            ByteWriter.WriteBytes(this.SMBData, ref offset, Challenge);
-            SMB1Helper.WriteSMBString(this.SMBData, ref offset, true, DomainName);
-            SMB1Helper.WriteSMBString(this.SMBData, ref offset, true, ServerName);
+            SmbData = Arrays.Rent(Challenge.Length + (DomainName.Length + 1) * 2 + (ServerName.Length + 1) * 2);
+            var offset = 0;
+            BufferWriter.WriteBytes(SmbData.Memory.Span, ref offset, Challenge);
+            SMB1Helper.WriteSMBString(SmbData.Memory.Span, ref offset, true, DomainName);
+            SMB1Helper.WriteSMBString(SmbData.Memory.Span, ref offset, true, ServerName);
 
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_NEGOTIATE;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_NEGOTIATE;
     }
 }

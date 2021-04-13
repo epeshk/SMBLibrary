@@ -4,9 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using MemoryPools.Memory;
 using SMBLibrary.SMB2;
 using Utilities;
 
@@ -16,9 +16,9 @@ namespace SMBLibrary.Server.SMB2
     {
         internal static SMB2Command GetTreeConnectResponse(TreeConnectRequest request, SMB2ConnectionState state, NamedPipeShare services, SMBShareCollection shares)
         {
-            SMB2Session session = state.GetSession(request.Header.SessionID);
-            TreeConnectResponse response = new TreeConnectResponse();
-            string shareName = ServerPathUtils.GetShareName(request.Path);
+            var session = state.GetSession(request.Header.SessionId);
+            var response = new TreeConnectResponse();
+            var shareName = ServerPathUtils.GetShareName(request.Path);
             ISMBShare share;
             ShareType shareType;
             ShareFlags shareFlags;
@@ -33,7 +33,7 @@ namespace SMBLibrary.Server.SMB2
                 share = shares.GetShareFromName(shareName);
                 if (share == null)
                 {
-                    return new ErrorResponse(request.CommandName, NTStatus.STATUS_OBJECT_PATH_NOT_FOUND);
+                    return ObjectsPool<ErrorResponse>.Get().Init(request.CommandName, NTStatus.STATUS_OBJECT_PATH_NOT_FOUND);
                 }
 
                 shareType = ShareType.Disk;
@@ -41,17 +41,17 @@ namespace SMBLibrary.Server.SMB2
                 if (!((FileSystemShare)share).HasReadAccess(session.SecurityContext, @"\"))
                 {
                     state.LogToServer(Severity.Verbose, "Tree Connect to '{0}' failed. User '{1}' was denied access.", share.Name, session.UserName);
-                    return new ErrorResponse(request.CommandName, NTStatus.STATUS_ACCESS_DENIED);
+                    return ObjectsPool<ErrorResponse>.Get().Init(request.CommandName, NTStatus.STATUS_ACCESS_DENIED);
                 }
             }
 
-            uint? treeID = session.AddConnectedTree(share);
+            var treeID = session.AddConnectedTree(share);
             if (!treeID.HasValue)
             {
-                return new ErrorResponse(request.CommandName, NTStatus.STATUS_INSUFF_SERVER_RESOURCES);
+                return ObjectsPool<ErrorResponse>.Get().Init(request.CommandName, NTStatus.STATUS_INSUFF_SERVER_RESOURCES);
             }
-            state.LogToServer(Severity.Information, "Tree Connect: User '{0}' connected to '{1}' (SessionID: {2}, TreeID: {3})", session.UserName, share.Name, request.Header.SessionID, treeID.Value);
-            response.Header.TreeID = treeID.Value;
+            state.LogToServer(Severity.Information, "Tree Connect: User '{0}' connected to '{1}' (SessionID: {2}, TreeID: {3})", session.UserName, share.Name, request.Header.SessionId, treeID.Value);
+            response.Header.TreeId = treeID.Value;
             response.ShareType = shareType;
             response.ShareFlags = shareFlags;
             response.MaximalAccess = (AccessMask)(FileAccessMask.FILE_READ_DATA | FileAccessMask.FILE_WRITE_DATA | FileAccessMask.FILE_APPEND_DATA |
@@ -79,9 +79,9 @@ namespace SMBLibrary.Server.SMB2
 
         internal static SMB2Command GetTreeDisconnectResponse(TreeDisconnectRequest request, ISMBShare share, SMB2ConnectionState state)
         {
-            SMB2Session session = state.GetSession(request.Header.SessionID);
-            session.DisconnectTree(request.Header.TreeID);
-            state.LogToServer(Severity.Information, "Tree Disconnect: User '{0}' disconnected from '{1}' (SessionID: {2}, TreeID: {3})", session.UserName, share.Name, request.Header.SessionID, request.Header.TreeID);
+            var session = state.GetSession(request.Header.SessionId);
+            session.DisconnectTree(request.Header.TreeId);
+            state.LogToServer(Severity.Information, "Tree Disconnect: User '{0}' disconnected from '{1}' (SessionID: {2}, TreeID: {3})", session.UserName, share.Name, request.Header.SessionId, request.Header.TreeId);
             return new TreeDisconnectResponse();
         }
     }

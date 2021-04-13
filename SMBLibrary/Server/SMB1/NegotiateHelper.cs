@@ -4,13 +4,12 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 using SMBLibrary.Authentication.GSSAPI;
 using SMBLibrary.Authentication.NTLM;
 using SMBLibrary.SMB1;
-using Utilities;
+using static System.TimeZone;
 
 namespace SMBLibrary.Server.SMB1
 {
@@ -26,7 +25,7 @@ namespace SMBLibrary.Server.SMB1
 
         internal static NegotiateResponse GetNegotiateResponse(SMB1Header header, NegotiateRequest request, GSSProvider securityProvider, ConnectionState state)
         {
-            NegotiateResponse response = new NegotiateResponse();
+            var response = new NegotiateResponse();
 
             response.DialectIndex = (ushort)request.Dialects.IndexOf(SMBServer.NTLanManagerDialect);
             response.SecurityMode = SecurityMode.UserSecurityMode | SecurityMode.EncryptPasswords;
@@ -44,10 +43,10 @@ namespace SMBLibrary.Server.SMB1
                                     Capabilities.LargeRead |
                                     Capabilities.LargeWrite;
             response.SystemTime = DateTime.UtcNow;
-            response.ServerTimeZone = (short)-TimeZone.CurrentTimeZone.GetUtcOffset(DateTime.Now).TotalMinutes;
-            NegotiateMessage negotiateMessage = CreateNegotiateMessage();
+            response.ServerTimeZone = (short)-CurrentTimeZone.GetUtcOffset(DateTime.Now).TotalMinutes;
+            var negotiateMessage = CreateNegotiateMessage();
             ChallengeMessage challengeMessage;
-            NTStatus status = securityProvider.GetNTLMChallengeMessage(out state.AuthenticationContext, negotiateMessage, out challengeMessage);
+            var status = securityProvider.GetNTLMChallengeMessage(out state.AuthenticationContext, negotiateMessage, out challengeMessage);
             if (status == NTStatus.SEC_I_CONTINUE_NEEDED)
             {
                 response.Challenge = challengeMessage.ServerChallenge;
@@ -60,7 +59,7 @@ namespace SMBLibrary.Server.SMB1
 
         internal static NegotiateResponseExtended GetNegotiateResponseExtended(NegotiateRequest request, Guid serverGuid)
         {
-            NegotiateResponseExtended response = new NegotiateResponseExtended();
+            var response = new NegotiateResponseExtended();
             response.DialectIndex = (ushort)request.Dialects.IndexOf(SMBServer.NTLanManagerDialect);
             response.SecurityMode = SecurityMode.UserSecurityMode | SecurityMode.EncryptPasswords;
             response.MaxMpxCount = ServerMaxMpxCount;
@@ -78,7 +77,7 @@ namespace SMBLibrary.Server.SMB1
                                     Capabilities.LargeWrite |
                                     Capabilities.ExtendedSecurity;
             response.SystemTime = DateTime.UtcNow;
-            response.ServerTimeZone = (short)-TimeZone.CurrentTimeZone.GetUtcOffset(DateTime.Now).TotalMinutes;
+            response.ServerTimeZone = (short)-CurrentTimeZone.GetUtcOffset(DateTime.Now).TotalMinutes;
             response.ServerGuid = serverGuid;
 
             return response;
@@ -86,7 +85,7 @@ namespace SMBLibrary.Server.SMB1
 
         private static NegotiateMessage CreateNegotiateMessage()
         {
-            NegotiateMessage negotiateMessage = new NegotiateMessage();
+            var negotiateMessage = new NegotiateMessage();
             negotiateMessage.NegotiateFlags = NegotiateFlags.UnicodeEncoding |
                                               NegotiateFlags.OEMEncoding |
                                               NegotiateFlags.Sign |

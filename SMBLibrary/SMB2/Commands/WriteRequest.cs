@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -28,72 +30,97 @@ namespace SMBLibrary.SMB2
         private ushort WriteChannelInfoOffset;
         private ushort WriteChannelInfoLength;
         public WriteFlags Flags;
-        public byte[] Data = new byte[0];
-        public byte[] WriteChannelInfo = new byte[0];
+        
+        public IMemoryOwner<byte> Data = MemoryOwner<byte>.Empty;
+        public IMemoryOwner<byte> WriteChannelInfo = MemoryOwner<byte>.Empty;
 
-        public WriteRequest() : base(SMB2CommandName.Write)
+        public WriteRequest Init()
         {
+            StructureSize = default;
+            DataOffset = default;
+            DataLength = default;
+            Offset = default;
+            FileId = default;
+            Channel = default;
+            RemainingBytes = default;
+            WriteChannelInfoOffset = default;
+            WriteChannelInfoLength = default;
+            Flags = default;
+            
+            Init(SMB2CommandName.Write);
+            
             StructureSize = DeclaredSize;
+            return this;
         }
 
-        public WriteRequest(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            DataOffset = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 2);
-            DataLength = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 4);
-            Offset = LittleEndianConverter.ToUInt64(buffer, offset + SMB2Header.Length + 8);
-            FileId = new FileID(buffer, offset + SMB2Header.Length + 16);
-            Channel = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 32);
-            RemainingBytes = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 36);
-            WriteChannelInfoOffset = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 40);
-            WriteChannelInfoLength = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 42);
-            Flags = (WriteFlags)LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 44);
-            Data = ByteReader.ReadBytes(buffer, offset + DataOffset, (int)DataLength);
-            WriteChannelInfo = ByteReader.ReadBytes(buffer, offset + WriteChannelInfoOffset, WriteChannelInfoLength);
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            DataOffset = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 2);
+            DataLength = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 4);
+            Offset = LittleEndianConverter.ToUInt64(buffer, offset + Smb2Header.Length + 8);
+            FileId = ObjectsPool<FileID>.Get().Init(buffer, offset + Smb2Header.Length + 16);
+            Channel = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 32);
+            RemainingBytes = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 36);
+            WriteChannelInfoOffset = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 40);
+            WriteChannelInfoLength = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 42);
+            Flags = (WriteFlags)LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 44);
+            Data = Arrays.RentFrom<byte>(buffer.Slice(offset + DataOffset, (int)DataLength));
+            WriteChannelInfo = Arrays.RentFrom<byte>(buffer.Slice(offset + WriteChannelInfoOffset, WriteChannelInfoLength));
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
             // Note: DataLength is UInt32 while WriteChannelInfoOffset is UInt16
             // so it is best to put WriteChannelInfo before Data.
             WriteChannelInfoOffset = 0;
-            WriteChannelInfoLength = (ushort)WriteChannelInfo.Length;
-            if (WriteChannelInfo.Length > 0)
+            WriteChannelInfoLength = (ushort)WriteChannelInfo.Length();
+            if (WriteChannelInfo.Length() > 0)
             {
-                WriteChannelInfoOffset = SMB2Header.Length + FixedSize;
+                WriteChannelInfoOffset = Smb2Header.Length + FixedSize;
             }
             DataOffset = 0;
-            DataLength = (uint)Data.Length;
-            if (Data.Length > 0)
+            DataLength = (uint)Data.Length();
+            if (Data.Length() > 0)
             {
-                DataOffset = (ushort)(SMB2Header.Length + FixedSize + WriteChannelInfo.Length);
+                DataOffset = (ushort)(Smb2Header.Length + FixedSize + WriteChannelInfo.Length());
             }
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 2, DataOffset);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 4, DataLength);
-            LittleEndianWriter.WriteUInt64(buffer, offset + 8, Offset);
-            FileId.WriteBytes(buffer, offset + 16);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 32, Channel);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 36, RemainingBytes);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 40, WriteChannelInfoOffset);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 42, WriteChannelInfoLength);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 44, (uint)Flags);
-            if (WriteChannelInfo.Length > 0)
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            LittleEndianWriter.WriteUInt16(buffer, 2, DataOffset);
+            LittleEndianWriter.WriteUInt32(buffer, 4, DataLength);
+            LittleEndianWriter.WriteUInt64(buffer, 8, Offset);
+            FileId.WriteBytes(buffer, 16);
+            LittleEndianWriter.WriteUInt32(buffer, 32, Channel);
+            LittleEndianWriter.WriteUInt32(buffer, 36, RemainingBytes);
+            LittleEndianWriter.WriteUInt16(buffer, 40, WriteChannelInfoOffset);
+            LittleEndianWriter.WriteUInt16(buffer, 42, WriteChannelInfoLength);
+            LittleEndianWriter.WriteUInt32(buffer, 44, (uint)Flags);
+            if (WriteChannelInfo.Length() > 0)
             {
-                ByteWriter.WriteBytes(buffer, offset + FixedSize, WriteChannelInfo);
+                BufferWriter.WriteBytes(buffer, FixedSize, WriteChannelInfo.Memory.Span);
             }
-            if (Data.Length > 0)
+            if (Data.Length() > 0)
             {
-                ByteWriter.WriteBytes(buffer, offset + FixedSize + WriteChannelInfo.Length, Data);
+                BufferWriter.WriteBytes(buffer, FixedSize + WriteChannelInfo.Length(), Data.Memory.Span);
             }
         }
 
-        public override int CommandLength
+        public override void Dispose()
         {
-            get
-            {
-                return FixedSize + Data.Length + WriteChannelInfo.Length;
-            }
+            base.Dispose();
+            Data.Dispose();
+
+            //FileId.Dispose(); - fileId handle is frequently used for multiple requests and can be disposed via ISMBFileStore.CloseFile(...) method.  
+            FileId = default;
+
+            WriteChannelInfo.Dispose();
+            WriteChannelInfo = Data = null;
+            ObjectsPool<WriteRequest>.Return(this);
         }
+
+        public override int CommandLength => FixedSize + Data.Length() + WriteChannelInfo.Length();
+        
     }
 }

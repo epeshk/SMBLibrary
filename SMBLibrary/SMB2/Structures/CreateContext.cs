@@ -4,8 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -27,14 +30,14 @@ namespace SMBLibrary.SMB2
         public ushort Reserved;
         private ushort DataOffset; // The offset from the beginning of this structure to the 8-byte aligned data payload
         private uint DataLength;
-        public string Name = String.Empty;
-        public byte[] Data = new byte[0];
+        public IMemoryOwner<char> Name = MemoryOwner<char>.Empty;
+        public IMemoryOwner<byte> Data = MemoryOwner<byte>.Empty;
 
         public CreateContext()
         {
         }
 
-        public CreateContext(byte[] buffer, int offset)
+        public CreateContext(Span<byte> buffer, int offset)
         {
             Next = LittleEndianConverter.ToUInt32(buffer, offset + 0);
             NameOffset = LittleEndianConverter.ToUInt16(buffer, offset + 4);
@@ -44,57 +47,57 @@ namespace SMBLibrary.SMB2
             DataLength = LittleEndianConverter.ToUInt32(buffer, offset + 12);
             if (NameLength > 0)
             {
-                Name = ByteReader.ReadUTF16String(buffer, offset + NameOffset, NameLength / 2);
+                Name = Arrays.Rent<char>(NameLength / 2); 
+                ByteReader.ReadUTF16String(Name.Memory.Span, buffer, offset + NameOffset, NameLength / 2);
             }
             if (DataLength > 0)
             {
-                Data = ByteReader.ReadBytes(buffer, offset + DataOffset, (int)DataLength);
+                Data = Arrays.Rent((int) DataLength); 
+                ByteReader.ReadBytes(Data.Memory.Span, buffer, offset + DataOffset, (int)DataLength);
             }
         }
 
-        private void WriteBytes(byte[] buffer, int offset)
+        private void WriteBytes(Span<byte> buffer, int offset)
         {
             LittleEndianWriter.WriteUInt32(buffer, offset + 0, Next);
             NameOffset = 0;
-            NameLength = (ushort)(Name.Length * 2);
-            if (Name.Length > 0)
+            NameLength = (ushort)(Name.Memory.Length * 2);
+            if (Name.Memory.Length > 0)
             {
-                NameOffset = (ushort)FixedLength;
+                NameOffset = FixedLength;
             }
             LittleEndianWriter.WriteUInt16(buffer, offset + 4, NameOffset);
             LittleEndianWriter.WriteUInt16(buffer, offset + 6, NameLength);
             LittleEndianWriter.WriteUInt16(buffer, offset + 8, Reserved);
             DataOffset = 0;
-            DataLength = (uint)Data.Length;
-            if (Data.Length > 0)
+            DataLength = (uint)Data.Memory.Length;
+            if (Data.Memory.Length > 0)
             {
-                int paddedNameLength = (int)Math.Ceiling((double)(Name.Length * 2) / 8) * 8;
+                var paddedNameLength = (int)Math.Ceiling((double)(Name.Memory.Length * 2) / 8) * 8;
                 DataOffset = (ushort)(FixedLength + paddedNameLength);
             }
             LittleEndianWriter.WriteUInt16(buffer, offset + 10, DataOffset);
-            ByteWriter.WriteUTF16String(buffer, NameOffset, Name);
-            ByteWriter.WriteBytes(buffer, DataOffset, Data);
+            BufferWriter.WriteUTF16String(buffer, NameOffset, Name.Memory.Span);
+            BufferWriter.WriteBytes(buffer, DataOffset, Data.Memory.Span);
         }
 
         public int Length
         {
             get
             {
-                if (Data.Length > 0)
+                if (Data.Memory.Length > 0)
                 {
-                    int paddedNameLength = (int)Math.Ceiling((double)(Name.Length * 2) / 8) * 8;
-                    return FixedLength + paddedNameLength + Data.Length;
+                    var paddedNameLength = (int)Math.Ceiling((double)(Name.Memory.Length * 2) / 8) * 8;
+                    return FixedLength + paddedNameLength + Data.Memory.Length;
                 }
-                else
-                {
-                    return FixedLength + Name.Length * 2;
-                }
+
+                return FixedLength + Name.Memory.Length * 2;
             }
         }
 
-        public static List<CreateContext> ReadCreateContextList(byte[] buffer, int offset)
+        public static List<CreateContext> ReadCreateContextList(Span<byte> buffer, int offset)
         {
-            List<CreateContext> result = new List<CreateContext>();
+            var result = new List<CreateContext>();
             CreateContext createContext;
             do
             {
@@ -107,13 +110,13 @@ namespace SMBLibrary.SMB2
             return result;
         }
 
-        public static void WriteCreateContextList(byte[] buffer, int offset, List<CreateContext> createContexts)
+        public static void WriteCreateContextList(Span<byte> buffer, int offset, List<CreateContext> createContexts)
         {
-            for (int index = 0; index < createContexts.Count; index++)
+            for (var index = 0; index < createContexts.Count; index++)
             {
-                CreateContext createContext = createContexts[index];
-                int length = createContext.Length;
-                int paddedLength = (int)Math.Ceiling((double)length / 8) * 8;
+                var createContext = createContexts[index];
+                var length = createContext.Length;
+                var paddedLength = (int)Math.Ceiling((double)length / 8) * 8;
                 if (index < createContexts.Count - 1)
                 {
                     createContext.Next = (uint)paddedLength;
@@ -129,14 +132,14 @@ namespace SMBLibrary.SMB2
 
         public static int GetCreateContextListLength(List<CreateContext> createContexts)
         {
-            int result = 0;
-            for(int index = 0; index < createContexts.Count; index++)
+            var result = 0;
+            for(var index = 0; index < createContexts.Count; index++)
             {
-                CreateContext createContext = createContexts[index];
-                int length = createContext.Length;
+                var createContext = createContexts[index];
+                var length = createContext.Length;
                 if (index < createContexts.Count - 1)
                 {
-                    int paddedLength = (int)Math.Ceiling((double)length / 8) * 8;
+                    var paddedLength = (int)Math.Ceiling((double)length / 8) * 8;
                     result += paddedLength;
                 }
                 else

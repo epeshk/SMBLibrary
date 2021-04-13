@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -26,28 +27,22 @@ namespace SMBLibrary.SMB1
         {
         }
 
-        public SetFileDispositionInfo(byte[] buffer) : this(buffer, 0)
+        public SetFileDispositionInfo(Span<byte> buffer) : this(buffer, 0)
         {
         }
 
-        public SetFileDispositionInfo(byte[] buffer, int offset)
+        public SetFileDispositionInfo(Span<byte> buffer, int offset)
         {
             DeletePending = (ByteReader.ReadByte(buffer, ref offset) > 0);
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            byte[] buffer = new byte[Length];
-            ByteWriter.WriteByte(buffer, 0, Convert.ToByte(DeletePending));
+            var buffer = Arrays.Rent(Length);
+            BufferWriter.WriteByte(buffer, 0, Convert.ToByte(DeletePending));
             return buffer;
         }
 
-        public override SetInformationLevel InformationLevel
-        {
-            get
-            {
-                return SetInformationLevel.SMB_SET_FILE_DISPOSITION_INFO;
-            }
-        }
+        public override SetInformationLevel InformationLevel => SetInformationLevel.SMB_SET_FILE_DISPOSITION_INFO;
     }
 }

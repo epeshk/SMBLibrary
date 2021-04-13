@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -30,11 +31,11 @@ namespace SMBLibrary.SMB1
         public ushort ExtendedAttributeErrorOffset;
         public uint ExtendedAttributeLength;
 
-        public Transaction2Open2Response() : base()
+        public Transaction2Open2Response()
         {
         }
 
-        public Transaction2Open2Response(byte[] parameters, byte[] data, bool isUnicode) : base()
+        public Transaction2Open2Response(byte[] parameters, byte[] data, bool isUnicode)
         {
             FID = LittleEndianConverter.ToUInt16(parameters, 0);
             FileAttributes = (SMBFileAttributes)LittleEndianConverter.ToUInt16(parameters, 2);
@@ -49,29 +50,23 @@ namespace SMBLibrary.SMB1
             ExtendedAttributeLength = LittleEndianConverter.ToUInt32(parameters, 26);
         }
 
-        public override byte[] GetParameters(bool isUnicode)
+        public override IMemoryOwner<byte> GetParameters(bool isUnicode)
         {
-            byte[] parameters = new byte[ParametersLength];
-            LittleEndianWriter.WriteUInt16(parameters, 0, FID);
-            LittleEndianWriter.WriteUInt16(parameters, 2, (ushort)FileAttributes);
-            UTimeHelper.WriteUTime(parameters, 4, CreationTime);
-            LittleEndianWriter.WriteUInt32(parameters, 8, FileDataSize);
-            AccessMode.WriteBytes(parameters, 12);
-            LittleEndianWriter.WriteUInt16(parameters, 14, (ushort)ResourceType);
-            NMPipeStatus.WriteBytes(parameters, 16);
-            ActionTaken.WriteBytes(parameters, 18);
-            LittleEndianWriter.WriteUInt32(parameters, 20, Reserved);
-            LittleEndianWriter.WriteUInt16(parameters, 24, ExtendedAttributeErrorOffset);
-            LittleEndianWriter.WriteUInt32(parameters, 26, ExtendedAttributeLength);
+            var parameters = Arrays.Rent(ParametersLength);
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 0, FID);
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 2, (ushort)FileAttributes);
+            UTimeHelper.WriteUTime(parameters.Memory.Span, 4, CreationTime);
+            LittleEndianWriter.WriteUInt32(parameters.Memory.Span, 8, FileDataSize);
+            AccessMode.WriteBytes(parameters.Memory.Span, 12);
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 14, (ushort)ResourceType);
+            NMPipeStatus.WriteBytes(parameters.Memory.Span, 16);
+            ActionTaken.WriteBytes(parameters.Memory.Span, 18);
+            LittleEndianWriter.WriteUInt32(parameters.Memory.Span, 20, Reserved);
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 24, ExtendedAttributeErrorOffset);
+            LittleEndianWriter.WriteUInt32(parameters.Memory.Span, 26, ExtendedAttributeLength);
             return parameters;
         }
 
-        public override Transaction2SubcommandName SubcommandName
-        {
-            get
-            {
-                return Transaction2SubcommandName.TRANS2_OPEN2;
-            }
-        }
+        public override Transaction2SubcommandName SubcommandName => Transaction2SubcommandName.TRANS2_OPEN2;
     }
 }

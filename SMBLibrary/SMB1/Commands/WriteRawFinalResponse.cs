@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -20,28 +21,28 @@ namespace SMBLibrary.SMB1
         // Parameters;
         public ushort Count;
 
-        public WriteRawFinalResponse() : base()
-        {}
-
-        public WriteRawFinalResponse(byte[] buffer, int offset) : base(buffer, offset, false)
+        public override SMB1Command Init()
         {
-            Count = LittleEndianConverter.ToUInt16(this.SMBParameters, 0);
+            base.Init();
+            Count = 0;
+            return this;
+        }
+        
+        public virtual SMB1Command Init(Span<byte> buffer, int offset)
+        {
+            base.Init(buffer, offset, false);
+            Count = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 0);
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            this.SMBParameters = new byte[ParametersLength];
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 0, Count);
+            SmbParameters = Arrays.Rent(ParametersLength);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 0, Count);
 
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get 
-            {
-                return CommandName.SMB_COM_WRITE_COMPLETE;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_WRITE_COMPLETE;
     }
 }

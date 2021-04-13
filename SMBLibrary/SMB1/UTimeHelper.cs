@@ -4,9 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -18,62 +18,66 @@ namespace SMBLibrary.SMB1
     {
         public static readonly DateTime MinUTimeValue = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Local);
 
-        public static DateTime ReadUTime(byte[] buffer, int offset)
+        public static DateTime ReadUTime(Span<byte> buffer, int offset)
         {
-            uint span = LittleEndianConverter.ToUInt32(buffer, offset);
+            var span = LittleEndianConverter.ToUInt32(buffer, offset);
             return MinUTimeValue.AddSeconds(span);
         }
 
-        public static DateTime ReadUTime(byte[] buffer, ref int offset)
+        public static DateTime ReadUTime(IMemoryOwner<byte> buffer, ref int offset) =>
+            ReadUTime(buffer.Memory.Span, ref offset);
+        
+        public static DateTime ReadUTime(Span<byte> buffer, ref int offset)
         {
             offset += 4;
             return ReadUTime(buffer, offset - 4);
         }
 
-        public static DateTime? ReadNullableUTime(byte[] buffer, int offset)
+        public static DateTime? ReadNullableUTime(IMemoryOwner<byte> buffer, int offset) => 
+            ReadNullableUTime(buffer.Memory.Span, offset);
+        
+        public static DateTime? ReadNullableUTime(Span<byte> buffer, int offset)
         {
-            uint span = LittleEndianConverter.ToUInt32(buffer, offset);
+            var span = LittleEndianConverter.ToUInt32(buffer, offset);
             if (span > 0)
             {
                 return MinUTimeValue.AddSeconds(span);
             }
-            else
-            {
-                return null;
-            }
+
+            return null;
         }
 
-        public static DateTime? ReadNullableUTime(byte[] buffer, ref int offset)
+        public static DateTime? ReadNullableUTime(Span<byte> buffer, ref int offset)
         {
             offset += 4;
             return ReadNullableUTime(buffer, offset - 4);
         }
 
-        public static void WriteUTime(byte[] buffer, int offset, DateTime time)
+        public static void WriteUTime(Span<byte> buffer, int offset, DateTime time)
         {
-            TimeSpan timespan = time - MinUTimeValue;
-            uint span = (uint)timespan.TotalSeconds;
+            var timespan = time - MinUTimeValue;
+            var span = (uint)timespan.TotalSeconds;
             LittleEndianWriter.WriteUInt32(buffer, offset, span);
         }
 
-        public static void WriteUTime(byte[] buffer, ref int offset, DateTime time)
+        public static void WriteUTime(Span<byte> buffer, ref int offset, DateTime time)
         {
             WriteUTime(buffer, offset, time);
             offset += 4;
         }
 
-        public static void WriteUTime(byte[] buffer, int offset, DateTime? time)
+        public static void WriteUTime(Span<byte> buffer, int offset, DateTime? time)
         {
             uint span = 0;
             if (time.HasValue)
             {
-                TimeSpan timespan = time.Value - MinUTimeValue;
+                var timespan = time.Value - MinUTimeValue;
                 span = (uint)timespan.TotalSeconds;
             }
             LittleEndianWriter.WriteUInt32(buffer, offset, span);
         }
 
-        public static void WriteUTime(byte[] buffer, ref int offset, DateTime? time)
+        public static void WriteUTime(Span<byte> buffer, ref int offset, DateTime? time)
         {
             WriteUTime(buffer, offset, time);
             offset += 4;

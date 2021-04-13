@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -20,30 +21,33 @@ namespace SMBLibrary.SMB2
         private ushort StructureSize;
         public ushort Reserved;
 
-        public EchoResponse() : base(SMB2CommandName.Echo)
+        public EchoResponse()
         {
+            Init(SMB2CommandName.Echo);
             Header.IsResponse = true;
             StructureSize = DeclaredSize;
         }
 
-        public EchoResponse(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            Reserved = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 2);
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            Reserved = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 2);
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 2, Reserved);
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            LittleEndianWriter.WriteUInt16(buffer, 2, Reserved);
         }
 
-        public override int CommandLength
+        public override void Dispose()
         {
-            get
-            {
-                return DeclaredSize;
-            }
+            base.Dispose();
+            ObjectsPool<EchoResponse>.Return(this);
         }
+
+        public override int CommandLength => DeclaredSize;
     }
 }

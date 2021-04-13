@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -24,42 +25,42 @@ namespace SMBLibrary.SMB1
         public ushort EaErrorOffset;
         public ushort LastNameOffset;
         // Data:
-        private byte[] FindInformationListBytes = new byte[0];
+        private IMemoryOwner<byte> FindInformationListBytes = MemoryOwner<byte>.Empty;
 
-        public Transaction2FindFirst2Response() : base()
+        public Transaction2FindFirst2Response()
         {
         }
 
-        public Transaction2FindFirst2Response(byte[] parameters, byte[] data, bool isUnicode) : base()
+        public Transaction2FindFirst2Response(IMemoryOwner<byte> parameters, IMemoryOwner<byte> data, bool isUnicode)
         {
-            SID = LittleEndianConverter.ToUInt16(parameters, 0);
-            SearchCount = LittleEndianConverter.ToUInt16(parameters, 2);
-            EndOfSearch = LittleEndianConverter.ToUInt16(parameters, 4) != 0;
-            EaErrorOffset = LittleEndianConverter.ToUInt16(parameters, 6);
-            LastNameOffset = LittleEndianConverter.ToUInt16(parameters, 8);
+            SID = LittleEndianConverter.ToUInt16(parameters.Memory.Span, 0);
+            SearchCount = LittleEndianConverter.ToUInt16(parameters.Memory.Span, 2);
+            EndOfSearch = LittleEndianConverter.ToUInt16(parameters.Memory.Span, 4) != 0;
+            EaErrorOffset = LittleEndianConverter.ToUInt16(parameters.Memory.Span, 6);
+            LastNameOffset = LittleEndianConverter.ToUInt16(parameters.Memory.Span, 8);
 
             FindInformationListBytes = data;
         }
 
-        public override byte[] GetParameters(bool isUnicode)
+        public override IMemoryOwner<byte> GetParameters(bool isUnicode)
         {
-            byte[] parameters = new byte[ParametersLength];
-            LittleEndianWriter.WriteUInt16(parameters, 0, SID);
-            LittleEndianWriter.WriteUInt16(parameters, 2, SearchCount);
-            LittleEndianWriter.WriteUInt16(parameters, 4, Convert.ToUInt16(EndOfSearch));
-            LittleEndianWriter.WriteUInt16(parameters, 6, EaErrorOffset);
-            LittleEndianWriter.WriteUInt16(parameters, 8, LastNameOffset);
+            var parameters = Arrays.Rent(ParametersLength);
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 0, SID);
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 2, SearchCount);
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 4, Convert.ToUInt16(EndOfSearch));
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 6, EaErrorOffset);
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 8, LastNameOffset);
             return parameters;
         }
 
-        public override byte[] GetData(bool isUnicode)
+        public override IMemoryOwner<byte> GetData(bool isUnicode)
         {
             return FindInformationListBytes;
         }
 
         public FindInformationList GetFindInformationList(FindInformationLevel findInformationLevel, bool isUnicode)
         {
-            return new FindInformationList(FindInformationListBytes, findInformationLevel, isUnicode);
+            return new FindInformationList(FindInformationListBytes.Memory.Span, findInformationLevel, isUnicode);
         }
 
         public void SetFindInformationList(FindInformationList findInformationList, bool isUnicode)
@@ -68,12 +69,6 @@ namespace SMBLibrary.SMB1
             FindInformationListBytes = findInformationList.GetBytes(isUnicode);
         }
 
-        public override Transaction2SubcommandName SubcommandName
-        {
-            get
-            {
-                return Transaction2SubcommandName.TRANS2_FIND_FIRST2;
-            }
-        }
+        public override Transaction2SubcommandName SubcommandName => Transaction2SubcommandName.TRANS2_FIND_FIRST2;
     }
 }

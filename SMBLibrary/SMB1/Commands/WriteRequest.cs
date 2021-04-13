@@ -4,9 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.IO;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -28,56 +30,64 @@ namespace SMBLibrary.SMB1
         // Data:
         public byte BufferFormat;
         // ushort DataLength;
-        public byte[] Data;
+        public IMemoryOwner<byte> Data;
 
-        public WriteRequest() : base()
+        public WriteRequest()
         {
+            FID = default;
+            CountOfBytesToWrite = default;
+            WriteOffsetInBytes = default;
+            EstimateOfRemainingBytesToBeWritten = default;
             BufferFormat = SupportedBufferFormat;
-            Data = new byte[0];
+            Data = MemoryOwner<byte>.Empty;
         }
 
-        public WriteRequest(byte[] buffer, int offset) : base(buffer, offset, false)
+        public WriteRequest Init(Span<byte> buffer, int offset)
         {
-            FID = LittleEndianConverter.ToUInt16(this.SMBParameters, 0);
-            CountOfBytesToWrite = LittleEndianConverter.ToUInt16(this.SMBParameters, 2);
-            WriteOffsetInBytes = LittleEndianConverter.ToUInt16(this.SMBParameters, 4);
-            EstimateOfRemainingBytesToBeWritten = LittleEndianConverter.ToUInt16(this.SMBParameters, 6);
+            base.Init(buffer, offset, false);
+            FID = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 0);
+            CountOfBytesToWrite = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 2);
+            WriteOffsetInBytes = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 4);
+            EstimateOfRemainingBytesToBeWritten = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 6);
 
-            BufferFormat = ByteReader.ReadByte(this.SMBData, 0);
+            BufferFormat = ByteReader.ReadByte(SmbData.Memory.Span, 0);
             if (BufferFormat != SupportedBufferFormat)
             {
                 throw new InvalidDataException("Unsupported Buffer Format");
             }
-            ushort dataLength = LittleEndianConverter.ToUInt16(this.SMBData, 1);
-            Data = ByteReader.ReadBytes(this.SMBData, 3, dataLength);
+            var dataLength = LittleEndianConverter.ToUInt16(SmbData.Memory.Span, 1);
+            Data = Arrays.RentFrom<byte>(SmbData.Memory.Span.Slice(3, dataLength));
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            if (Data.Length > UInt16.MaxValue)
+            if (Data.Length() > UInt16.MaxValue)
             {
                 throw new ArgumentException("Invalid Data length");
             }
-            this.SMBParameters = new byte[ParametersLength];
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 0, FID);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 2, CountOfBytesToWrite);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 4, WriteOffsetInBytes);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 6, EstimateOfRemainingBytesToBeWritten);
+            SmbParameters = Arrays.Rent(ParametersLength);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 0, FID);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 2, CountOfBytesToWrite);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 4, WriteOffsetInBytes);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 6, EstimateOfRemainingBytesToBeWritten);
 
-            this.SMBData = new byte[3 + Data.Length];
-            ByteWriter.WriteByte(this.SMBData, 0, BufferFormat);
-            LittleEndianWriter.WriteUInt16(this.SMBData, 1, (ushort)Data.Length);
-            ByteWriter.WriteBytes(this.SMBData, 3, Data);
+            SmbData = Arrays.Rent(3 + Data.Length());
+            BufferWriter.WriteByte(SmbData.Memory.Span, 0, BufferFormat);
+            LittleEndianWriter.WriteUInt16(SmbData.Memory.Span, 1, (ushort)Data.Length());
+            BufferWriter.WriteBytes(SmbData.Memory.Span, 3, Data.Memory.Span);
 
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
+        public override CommandName CommandName => CommandName.SMB_COM_WRITE;
+
+        public override void Dispose()
         {
-            get
-            {
-                return CommandName.SMB_COM_WRITE;
-            }
+            base.Dispose();
+            Data?.Dispose();
+            Data = null;
         }
     }
 }

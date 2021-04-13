@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -26,50 +27,53 @@ namespace SMBLibrary.SMB1
         public ServiceName Service;     // OEM String
         public string NativeFileSystem; // SMB_STRING
 
-        public TreeConnectAndXResponse() : base()
+        public override SMB1Command Init()
         {
+            base.Init();
+            Service = default;
+            OptionalSupport = default;
+            NativeFileSystem = default;
+            return this;
         }
 
-        public TreeConnectAndXResponse(byte[] buffer, int offset, bool isUnicode) : base(buffer, offset, isUnicode)
+        public override SMB1Command Init(Span<byte> buffer, int offset, bool isUnicode)
         {
-            OptionalSupport = (OptionalSupportFlags)LittleEndianConverter.ToUInt16(this.SMBParameters, 4);
+            base.Init(buffer, offset, isUnicode);
+            
+            OptionalSupport = (OptionalSupportFlags)LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 4);
 
-            int dataOffset = 0;
-            string serviceString = ByteReader.ReadNullTerminatedAnsiString(this.SMBData, ref dataOffset);
-            NativeFileSystem = SMB1Helper.ReadSMBString(this.SMBData, ref dataOffset, isUnicode);
+            var dataOffset = 0;
+            var serviceString = ByteReader.ReadNullTerminatedAnsiString(SmbData.Memory.Span, ref dataOffset);
+            NativeFileSystem = SMB1Helper.ReadSMBString(SmbData.Memory.Span, ref dataOffset, isUnicode);
 
             Service = ServiceNameHelper.GetServiceName(serviceString);
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            this.SMBParameters = new byte[ParametersLength];
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 4, (ushort)OptionalSupport);
+            SmbParameters = Arrays.Rent(ParametersLength);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 4, (ushort)OptionalSupport);
 
             // Should be written as OEM string but it doesn't really matter
-            string serviceString = ServiceNameHelper.GetServiceString(Service);
+            var serviceString = ServiceNameHelper.GetServiceString(Service);
             if (isUnicode)
             {
-                this.SMBData = new byte[serviceString.Length + NativeFileSystem.Length * 2 + 3];
+                SmbData = Arrays.Rent(serviceString.Length + NativeFileSystem.Length * 2 + 3);
             }
             else
             {
-                this.SMBData = new byte[serviceString.Length + NativeFileSystem.Length + 2];
+                SmbData = Arrays.Rent(serviceString.Length + NativeFileSystem.Length + 2);
             }
 
-            int offset = 0;
-            ByteWriter.WriteNullTerminatedAnsiString(this.SMBData, ref offset, serviceString);
-            SMB1Helper.WriteSMBString(this.SMBData, ref offset, isUnicode, NativeFileSystem);
+            var offset = 0;
+            BufferWriter.WriteNullTerminatedAnsiString(SmbData.Memory.Span, ref offset, serviceString);
+            SMB1Helper.WriteSMBString(SmbData.Memory.Span, ref offset, isUnicode, NativeFileSystem);
 
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_TREE_CONNECT_ANDX;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_TREE_CONNECT_ANDX;
     }
 }

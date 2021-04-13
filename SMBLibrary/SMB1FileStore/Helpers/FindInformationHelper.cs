@@ -4,10 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
-using SMBLibrary.SMB1;
-using Utilities;
+using MemoryPools.Memory;
+using SMBLibrary.Client;
 
 namespace SMBLibrary.SMB1
 {
@@ -36,14 +37,14 @@ namespace SMBLibrary.SMB1
         }
 
         /// <exception cref="SMBLibrary.UnsupportedInformationLevelException"></exception>
-        public static FindInformationList ToFindInformationList(List<QueryDirectoryFileInformation> entries, bool isUnicode, int maxLength)
+        public static FindInformationList ToFindInformationList(List<FindFilesQueryResult> entries, bool isUnicode, int maxLength)
         {
-            FindInformationList result = new FindInformationList();
-            int pageLength = 0;
-            for (int index = 0; index < entries.Count; index++)
+            var result = new FindInformationList();
+            var pageLength = 0;
+            for (var index = 0; index < entries.Count; index++)
             {
-                FindInformation infoEntry = ToFindInformation(entries[index]);
-                int entryLength = infoEntry.GetLength(isUnicode);
+                var infoEntry = ToFindInformation(entries[index]);
+                var entryLength = infoEntry.GetLength(isUnicode);
                 if (pageLength + entryLength <= maxLength)
                 {
                     result.Add(infoEntry);
@@ -58,107 +59,25 @@ namespace SMBLibrary.SMB1
         }
 
         /// <exception cref="SMBLibrary.UnsupportedInformationLevelException"></exception>
-        public static FindInformation ToFindInformation(QueryDirectoryFileInformation fileInformation)
+        public static FindInformation ToFindInformation(FindFilesQueryResult fileInformation)
         {
-            if (fileInformation is FileDirectoryInformation)
+            if (fileInformation != null)
             {
-                FileDirectoryInformation fileDirectoryInfo = (FileDirectoryInformation)fileInformation;
-                FindFileDirectoryInfo result = new FindFileDirectoryInfo();
-                result.FileIndex = fileDirectoryInfo.FileIndex;
+                var fileDirectoryInfo = fileInformation;
+                var result = new FindFileDirectoryInfo();
+                result.FileIndex = fileDirectoryInfo.Index ?? default;
                 result.CreationTime = fileDirectoryInfo.CreationTime;
                 result.LastAccessTime = fileDirectoryInfo.LastAccessTime;
                 result.LastWriteTime = fileDirectoryInfo.LastWriteTime;
                 result.LastAttrChangeTime = fileDirectoryInfo.LastWriteTime;
                 result.EndOfFile = fileDirectoryInfo.EndOfFile;
                 result.AllocationSize = fileDirectoryInfo.AllocationSize;
-                result.ExtFileAttributes = (ExtendedFileAttributes)fileDirectoryInfo.FileAttributes;
-                result.FileName = fileDirectoryInfo.FileName;
+                result.ExtFileAttributes = fileDirectoryInfo.FileAttributes;
+                result.FileName = fileDirectoryInfo.FileName.AddOwner();
                 return result;
             }
-            else if (fileInformation is FileFullDirectoryInformation)
-            {
-                FileFullDirectoryInformation fileFullDirectoryInfo = (FileFullDirectoryInformation)fileInformation;
-                FindFileFullDirectoryInfo result = new FindFileFullDirectoryInfo();
-                result.FileIndex = fileFullDirectoryInfo.FileIndex;
-                result.CreationTime = fileFullDirectoryInfo.CreationTime;
-                result.LastAccessTime = fileFullDirectoryInfo.LastAccessTime;
-                result.LastWriteTime = fileFullDirectoryInfo.LastWriteTime;
-                result.LastAttrChangeTime = fileFullDirectoryInfo.LastWriteTime;
-                result.EndOfFile = fileFullDirectoryInfo.EndOfFile;
-                result.AllocationSize = fileFullDirectoryInfo.AllocationSize;
-                result.ExtFileAttributes = (ExtendedFileAttributes)fileFullDirectoryInfo.FileAttributes;
-                result.EASize = fileFullDirectoryInfo.EaSize;
-                result.FileName = fileFullDirectoryInfo.FileName;
-                return result;
-            }
-            else if (fileInformation is FileNamesInformation)
-            {
-                FileNamesInformation fileNamesInfo = (FileNamesInformation)fileInformation;
-                FindFileNamesInfo result = new FindFileNamesInfo();
-                result.FileIndex = fileNamesInfo.FileIndex;
-                result.FileName = fileNamesInfo.FileName;
-                return result;
-            }
-            else if (fileInformation is FileBothDirectoryInformation)
-            {
-                FileBothDirectoryInformation fileBothDirectoryInfo = (FileBothDirectoryInformation)fileInformation;
-                FindFileBothDirectoryInfo result = new FindFileBothDirectoryInfo();
-                result.FileIndex = fileBothDirectoryInfo.FileIndex;
-                result.CreationTime = fileBothDirectoryInfo.CreationTime;
-                result.LastAccessTime = fileBothDirectoryInfo.LastAccessTime;
-                result.LastWriteTime = fileBothDirectoryInfo.LastWriteTime;
-                result.LastChangeTime = fileBothDirectoryInfo.LastWriteTime;
-                result.EndOfFile = fileBothDirectoryInfo.EndOfFile;
-                result.AllocationSize = fileBothDirectoryInfo.AllocationSize;
-                result.ExtFileAttributes = (ExtendedFileAttributes)fileBothDirectoryInfo.FileAttributes;
-                result.EASize = fileBothDirectoryInfo.EaSize;
-                result.Reserved = fileBothDirectoryInfo.Reserved;
-                result.ShortName = fileBothDirectoryInfo.ShortName;
-                result.FileName = fileBothDirectoryInfo.FileName;
-                return result;
-            }
-            else if (fileInformation is FileIdFullDirectoryInformation)
-            {
-                FileIdFullDirectoryInformation fileIDFullDirectoryInfo = (FileIdFullDirectoryInformation)fileInformation;
-                FindFileIDFullDirectoryInfo result = new FindFileIDFullDirectoryInfo();
-                result.FileIndex = fileIDFullDirectoryInfo.FileIndex;
-                result.CreationTime = fileIDFullDirectoryInfo.CreationTime;
-                result.LastAccessTime = fileIDFullDirectoryInfo.LastAccessTime;
-                result.LastWriteTime = fileIDFullDirectoryInfo.LastWriteTime;
-                result.LastAttrChangeTime = fileIDFullDirectoryInfo.LastWriteTime;
-                result.EndOfFile = fileIDFullDirectoryInfo.EndOfFile;
-                result.AllocationSize = fileIDFullDirectoryInfo.AllocationSize;
-                result.ExtFileAttributes = (ExtendedFileAttributes)fileIDFullDirectoryInfo.FileAttributes;
-                result.EASize = fileIDFullDirectoryInfo.EaSize;
-                result.Reserved = fileIDFullDirectoryInfo.Reserved;
-                result.FileID = fileIDFullDirectoryInfo.FileId;
-                result.FileName = fileIDFullDirectoryInfo.FileName;
-                return result;
-            }
-            else if (fileInformation is FileIdBothDirectoryInformation)
-            {
-                FileIdBothDirectoryInformation fileIDBothDirectoryInfo = (FileIdBothDirectoryInformation)fileInformation;
-                FindFileIDBothDirectoryInfo result = new FindFileIDBothDirectoryInfo();
-                result.FileIndex = fileIDBothDirectoryInfo.FileIndex;
-                result.CreationTime = fileIDBothDirectoryInfo.CreationTime;
-                result.LastAccessTime = fileIDBothDirectoryInfo.LastAccessTime;
-                result.LastWriteTime = fileIDBothDirectoryInfo.LastWriteTime;
-                result.LastChangeTime = fileIDBothDirectoryInfo.LastWriteTime;
-                result.EndOfFile = fileIDBothDirectoryInfo.EndOfFile;
-                result.AllocationSize = fileIDBothDirectoryInfo.AllocationSize;
-                result.ExtFileAttributes = (ExtendedFileAttributes)fileIDBothDirectoryInfo.FileAttributes;
-                result.EASize = fileIDBothDirectoryInfo.EaSize;
-                result.Reserved = fileIDBothDirectoryInfo.Reserved1;
-                result.ShortName = fileIDBothDirectoryInfo.ShortName;
-                result.Reserved2 = fileIDBothDirectoryInfo.Reserved2;
-                result.FileID = fileIDBothDirectoryInfo.FileId;
-                result.FileName = fileIDBothDirectoryInfo.FileName;
-                return result;
-            }
-            else
-            {
-                throw new NotImplementedException();
-            }
+
+            throw new NotImplementedException();
         }
     }
 }

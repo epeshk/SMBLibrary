@@ -4,8 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Utilities;
@@ -56,7 +56,7 @@ namespace SMBLibrary.NetBios
 
         public static byte[] EncodeName(string name, NetBiosSuffix suffix, string scopeID)
         {
-            string netBiosName = GetMSNetBiosName(name, suffix);
+            var netBiosName = GetMSNetBiosName(name, suffix);
             return EncodeName(netBiosName, scopeID);
         }
 
@@ -64,7 +64,7 @@ namespace SMBLibrary.NetBios
         /// <param name="scopeID">dot-separated labels, formatted per DNS naming rules</param>
         public static byte[] EncodeName(string netBiosName, string scopeID)
         {
-            string domainName = FirstLevelEncoding(netBiosName, scopeID);
+            var domainName = FirstLevelEncoding(netBiosName, scopeID);
             return SecondLevelEncoding(domainName);
         }
 
@@ -85,12 +85,12 @@ namespace SMBLibrary.NetBios
                 throw new ArgumentException("Invalid MS NetBIOS name");
             }
 
-            StringBuilder builder = new StringBuilder();
-            for (int index = 0; index < netBiosName.Length; index++)
+            var builder = new StringBuilder();
+            for (var index = 0; index < netBiosName.Length; index++)
             {
-                byte c = (byte)netBiosName[index];
-                byte high = (byte)(0x41 + (c >> 4));
-                byte low = (byte)(0x41 + (c & 0x0F));
+                var c = (byte)netBiosName[index];
+                var high = (byte)(0x41 + (c >> 4));
+                var low = (byte)(0x41 + (c & 0x0F));
                 builder.Append((char)high);
                 builder.Append((char)low);
             }
@@ -115,9 +115,9 @@ namespace SMBLibrary.NetBios
         /// </summary>
         public static byte[] SecondLevelEncoding(string domainName)
         {
-            string[] labels = domainName.Split('.');
-            int length = 1; // null terminator
-            for (int index = 0; index < labels.Length; index++)
+            var labels = domainName.Split('.');
+            var length = 1; // null terminator
+            for (var index = 0; index < labels.Length; index++)
             {
                 length += 1 + labels[index].Length;
                 if (labels[index].Length > 63)
@@ -126,13 +126,14 @@ namespace SMBLibrary.NetBios
                 }
             }
             
-            byte[] result = new byte[length];
-            int offset = 0;
-            foreach(string label in labels)
+            var result = new byte[length];
+            var offset = 0;
+            for (var index = 0; index < labels.Length; index++)
             {
-                result[offset] = (byte)label.Length;
+                var label = labels[index];
+                result[offset] = (byte) label.Length;
                 offset++;
-                ByteWriter.WriteAnsiString(result, offset, label, label.Length);
+                BufferWriter.WriteAnsiString(result, offset, label, label.Length);
                 offset += label.Length;
             }
 
@@ -140,18 +141,18 @@ namespace SMBLibrary.NetBios
             return result;
         }
 
-        public static string DecodeName(byte[] buffer, ref int offset)
+        public static string DecodeName(Span<byte> buffer, ref int offset)
         {
-            string domainName = SecondLevelDecoding(buffer, ref offset);
-            string name = domainName.Split('.')[0];
+            var domainName = SecondLevelDecoding(buffer, ref offset);
+            var name = domainName.Split('.')[0];
             return FirstLevelDecoding(name);
         }
 
-        public static string SecondLevelDecoding(byte[] buffer, ref int offset)
+        public static string SecondLevelDecoding(Span<byte> buffer, ref int offset)
         {
-            StringBuilder builder = new StringBuilder();
+            var builder = new StringBuilder();
 
-            byte labelLength = ByteReader.ReadByte(buffer, ref offset);
+            var labelLength = ByteReader.ReadByte(buffer, ref offset);
             while (labelLength > 0)
             {
                 if (builder.Length > 0)
@@ -165,7 +166,7 @@ namespace SMBLibrary.NetBios
                     throw new ArgumentException("Invalid NetBIOS label length");
                 }
 
-                string label = ByteReader.ReadAnsiString(buffer, offset, labelLength);
+                var label = ByteReader.ReadAnsiString(buffer, offset, labelLength);
                 builder.Append(label);
                 offset += labelLength;
 
@@ -177,22 +178,22 @@ namespace SMBLibrary.NetBios
 
         public static string FirstLevelDecoding(string name)
         {
-            StringBuilder builder = new StringBuilder();
+            var builder = new StringBuilder();
 
-            for(int index = 0; index < name.Length; index += 2)
+            for(var index = 0; index < name.Length; index += 2)
             {
-                byte c0 = (byte)name[index];
-                byte c1 = (byte)name[index + 1];
-                byte high = (byte)(((c0 - 0x41) & 0xF) << 4);
-                byte low = (byte)((c1 - 0x41) & 0xF);
-                byte c = (byte)(high | low);
+                var c0 = (byte)name[index];
+                var c1 = (byte)name[index + 1];
+                var high = (byte)(((c0 - 0x41) & 0xF) << 4);
+                var low = (byte)((c1 - 0x41) & 0xF);
+                var c = (byte)(high | low);
                 builder.Append((char)c);
             }
 
             return builder.ToString();
         }
 
-        public static void WriteNamePointer(byte[] buffer, ref int offset, int nameOffset)
+        public static void WriteNamePointer(Span<byte> buffer, ref int offset, int nameOffset)
         {
             WriteNamePointer(buffer, offset, nameOffset);
             offset += 2;
@@ -202,15 +203,15 @@ namespace SMBLibrary.NetBios
         /// Will write a 2 bytes pointer to a name
         /// Note: NetBIOS implementations can only use label string pointers in Name Service packets
         /// </summary>
-        public static void WriteNamePointer(byte[] buffer, int offset, int nameOffset)
+        public static void WriteNamePointer(Span<byte> buffer, int offset, int nameOffset)
         {
-            ushort pointer = (ushort)(0xC000 | (nameOffset & 0x3FFF));
+            var pointer = (ushort)(0xC000 | (nameOffset & 0x3FFF));
             BigEndianWriter.WriteUInt16(buffer, offset, pointer);
         }
 
         public static void WriteNamePointer(Stream stream, int nameOffset)
         {
-            ushort pointer = (ushort)(0xC000 | (nameOffset & 0x3FFF));
+            var pointer = (ushort)(0xC000 | (nameOffset & 0x3FFF));
             BigEndianWriter.WriteUInt16(stream, pointer);
         }
     }

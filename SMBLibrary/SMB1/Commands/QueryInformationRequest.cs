@@ -4,9 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.IO;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -23,25 +25,33 @@ namespace SMBLibrary.SMB1
         public byte BufferFormat;
         public string FileName; // SMB_STRING
 
-        public QueryInformationRequest() : base()
+        public override SMB1Command Init()
         {
+            base.Init();
+            
             BufferFormat = SupportedBufferFormat;
-            FileName = String.Empty;
+            FileName = string.Empty;
+
+            return this;
         }
 
-        public QueryInformationRequest(byte[] buffer, int offset, bool isUnicode) : base(buffer, offset, isUnicode)
+        public override SMB1Command Init(Span<byte> buffer, int offset, bool isUnicode)
         {
-            BufferFormat = ByteReader.ReadByte(this.SMBData, 0);
+            base.Init(buffer, offset, isUnicode);
+            
+            BufferFormat = ByteReader.ReadByte(SmbData.Memory.Span, 0);
             if (BufferFormat != SupportedBufferFormat)
             {
                 throw new InvalidDataException("Unsupported Buffer Format");
             }
-            FileName = SMB1Helper.ReadSMBString(this.SMBData, 1, isUnicode);
+            FileName = SMB1Helper.ReadSMBString(SmbData.Memory.Span, 1, isUnicode);
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            int length = 1;
+            var length = 1;
             if (isUnicode)
             {
                 length += FileName.Length * 2 + 2;
@@ -50,19 +60,13 @@ namespace SMBLibrary.SMB1
             {
                 length += FileName.Length + 1;
             }
-            this.SMBData = new byte[1 + length];
-            ByteWriter.WriteByte(this.SMBData, 0, BufferFormat);
-            SMB1Helper.WriteSMBString(this.SMBData, 1, isUnicode, FileName);
+            SmbData = Arrays.Rent(1 + length);
+            BufferWriter.WriteByte(SmbData.Memory.Span, 0, BufferFormat);
+            SMB1Helper.WriteSMBString(SmbData.Memory.Span, 1, isUnicode, FileName);
 
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_QUERY_INFORMATION;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_QUERY_INFORMATION;
     }
 }

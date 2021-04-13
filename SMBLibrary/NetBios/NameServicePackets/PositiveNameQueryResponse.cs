@@ -4,10 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.NetBios
@@ -33,15 +32,15 @@ namespace SMBLibrary.NetBios
             Resource = new ResourceRecord(NameRecordType.NB);
         }
 
-        public PositiveNameQueryResponse(byte[] buffer, int offset)
+        public PositiveNameQueryResponse(Span<byte> buffer, int offset)
         {
             Header = new NameServicePacketHeader(buffer, ref offset);
             Resource = new ResourceRecord(buffer, ref offset);
-            int position = 0;
+            var position = 0;
             while (position < Resource.Data.Length)
             {
-                NameFlags nameFlags = (NameFlags)BigEndianReader.ReadUInt16(Resource.Data, ref position);
-                byte[] address = ByteReader.ReadBytes(Resource.Data, ref position, 4);
+                var nameFlags = (NameFlags)BigEndianReader.ReadUInt16(Resource.Data, ref position);
+                var address = ByteReader.ReadBytes_RentArray(Resource.Data, ref position, 4);
                 Addresses.Add(address, nameFlags);
             }
         }
@@ -50,7 +49,7 @@ namespace SMBLibrary.NetBios
         {
             Resource.Data = GetData();
 
-            MemoryStream stream = new MemoryStream();
+            var stream = new MemoryStream();
             Header.WriteBytes(stream);
             Resource.WriteBytes(stream);
             return stream.ToArray();
@@ -58,13 +57,15 @@ namespace SMBLibrary.NetBios
 
         private byte[] GetData()
         {
-            byte[] data = new byte[EntryLength * Addresses.Count];
-            int offset = 0;
-            foreach (KeyValuePair<byte[], NameFlags> entry in Addresses)
+            var data = new byte[EntryLength * Addresses.Count];
+            var offset = 0;
+            for (var index = 0; index < Addresses.Count; index++)
             {
-                BigEndianWriter.WriteUInt16(data, ref offset, (ushort)entry.Value);
-                ByteWriter.WriteBytes(data, ref offset, entry.Key, 4);
+                var entry = Addresses[index];
+                BigEndianWriter.WriteUInt16(data, ref offset, (ushort) entry.Value);
+                BufferWriter.WriteBytes(data, ref offset, entry.Key, 4);
             }
+
             return data;
         }
     }

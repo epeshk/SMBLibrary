@@ -4,18 +4,18 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
+
 using System.Collections.Generic;
-using Utilities;
+using SMBLibrary.Client;
 
 namespace SMBLibrary.Server
 {
     internal class OpenSearch
     {
-        public List<QueryDirectoryFileInformation> Entries;
+        public List<FindFilesQueryResult> Entries;
         public int EnumerationLocation;
 
-        public OpenSearch(List<QueryDirectoryFileInformation> entries, int enumerationLocation)
+        public OpenSearch(List<FindFilesQueryResult> entries, int enumerationLocation)
         {
             Entries = entries;
             EnumerationLocation = enumerationLocation;

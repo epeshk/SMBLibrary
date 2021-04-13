@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -33,66 +34,64 @@ namespace SMBLibrary.SMB1
         // Data:
         public string FileName; // SMB_STRING (If Unicode, this field MUST be aligned to start on a 2-byte boundary from the start of the SMB header)
 
-        public OpenAndXRequest() : base()
+        public override SMB1Command Init()
         {
+            base.Init();
+            return this;
         }
 
-        public OpenAndXRequest(byte[] buffer, int offset, bool isUnicode) : base(buffer, offset, isUnicode)
+        public override SMB1Command Init(Span<byte> buffer, int offset, bool isUnicode)
         {
-            int parametersOffset = 4;
-            Flags = (OpenFlags)LittleEndianReader.ReadUInt16(this.SMBParameters, ref parametersOffset);
-            AccessMode = AccessModeOptions.Read(this.SMBParameters, ref parametersOffset);
-            SearchAttrs = (SMBFileAttributes)LittleEndianReader.ReadUInt16(this.SMBParameters, ref parametersOffset);
-            FileAttrs = (SMBFileAttributes)LittleEndianReader.ReadUInt16(this.SMBParameters, ref parametersOffset);
-            CreationTime = UTimeHelper.ReadNullableUTime(this.SMBParameters, ref parametersOffset);
-            OpenMode = OpenMode.Read(this.SMBParameters, ref parametersOffset);
-            AllocationSize = LittleEndianReader.ReadUInt32(this.SMBParameters, ref parametersOffset);
-            Timeout = LittleEndianReader.ReadUInt32(this.SMBParameters, ref parametersOffset);
-            Reserved = LittleEndianReader.ReadUInt32(this.SMBParameters, ref parametersOffset);
+            base.Init(buffer, offset, isUnicode);
+            var parametersOffset = 4;
+            Flags = (OpenFlags)LittleEndianReader.ReadUInt16(SmbParameters.Memory.Span, ref parametersOffset);
+            AccessMode = AccessModeOptions.Read(SmbParameters.Memory.Span, ref parametersOffset);
+            SearchAttrs = (SMBFileAttributes)LittleEndianReader.ReadUInt16(SmbParameters.Memory.Span, ref parametersOffset);
+            FileAttrs = (SMBFileAttributes)LittleEndianReader.ReadUInt16(SmbParameters.Memory.Span, ref parametersOffset);
+            CreationTime = UTimeHelper.ReadNullableUTime(SmbParameters.Memory.Span, ref parametersOffset);
+            OpenMode = OpenMode.Read(SmbParameters.Memory.Span, ref parametersOffset);
+            AllocationSize = LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref parametersOffset);
+            Timeout = LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref parametersOffset);
+            Reserved = LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref parametersOffset);
 
-            int dataOffset = 0;
+            var dataOffset = 0;
             if (isUnicode)
             {
                 dataOffset = 1; // 1 byte padding for 2 byte alignment
             }
-            FileName = SMB1Helper.ReadSMBString(this.SMBData, dataOffset, isUnicode);
+            FileName = SMB1Helper.ReadSMBString(SmbData.Memory.Span, dataOffset, isUnicode);
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            this.SMBParameters = new byte[ParametersLength];
-            int parametersOffset = 4;
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, ref parametersOffset, (ushort)Flags);
-            AccessMode.WriteBytes(this.SMBParameters, ref parametersOffset);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, ref parametersOffset, (ushort)SearchAttrs);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, ref parametersOffset, (ushort)FileAttrs);
-            UTimeHelper.WriteUTime(this.SMBParameters, ref parametersOffset, CreationTime);
-            OpenMode.WriteBytes(this.SMBParameters, ref parametersOffset);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref parametersOffset, AllocationSize);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref parametersOffset, Timeout);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref parametersOffset, Reserved);
+            SmbParameters = Arrays.Rent(ParametersLength);
+            var parametersOffset = 4;
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, ref parametersOffset, (ushort)Flags);
+            AccessMode.WriteBytes(SmbParameters.Memory.Span, ref parametersOffset);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, ref parametersOffset, (ushort)SearchAttrs);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, ref parametersOffset, (ushort)FileAttrs);
+            UTimeHelper.WriteUTime(SmbParameters.Memory.Span, ref parametersOffset, CreationTime);
+            OpenMode.WriteBytes(SmbParameters.Memory.Span, ref parametersOffset);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref parametersOffset, AllocationSize);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref parametersOffset, Timeout);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref parametersOffset, Reserved);
 
-            int padding = 0;
+            var padding = 0;
             if (isUnicode)
             {
                 padding = 1;
-                this.SMBData = new byte[padding + FileName.Length * 2 + 2];
+                SmbData = Arrays.Rent(padding + FileName.Length * 2 + 2);
             }
             else
             {
-                this.SMBData = new byte[FileName.Length + 1];
+                SmbData = Arrays.Rent(FileName.Length + 1);
             }
-            SMB1Helper.WriteSMBString(this.SMBData, padding, isUnicode, FileName);
+            SMB1Helper.WriteSMBString(SmbData.Memory.Span, padding, isUnicode, FileName);
 
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_OPEN_ANDX;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_OPEN_ANDX;
     }
 }

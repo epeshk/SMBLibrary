@@ -4,9 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using System.Text;
+
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -20,33 +20,27 @@ namespace SMBLibrary.SMB1
         // Parameters;
         public NamedPipeStatus NMPipeStatus;
 
-        public TransactionQueryNamedPipeStateResponse() : base()
+        public TransactionQueryNamedPipeStateResponse()
         {
         }
 
-        public TransactionQueryNamedPipeStateResponse(byte[] parameters) : base()
+        public TransactionQueryNamedPipeStateResponse(byte[] parameters)
         {
             NMPipeStatus = new NamedPipeStatus(LittleEndianConverter.ToUInt16(parameters, 0));
         }
 
-        public override byte[] GetSetup()
+        public override IMemoryOwner<byte> GetSetup()
         {
-            return new byte[0];
+            return MemoryOwner<byte>.Empty;
         }
 
-        public override byte[] GetParameters()
+        public override IMemoryOwner<byte> GetParameters()
         {
-            byte[] parameters = new byte[2];
-            NMPipeStatus.WriteBytes(parameters, 0);
+            var parameters = Arrays.Rent(2);
+            NMPipeStatus.WriteBytes(parameters.Memory.Span, 0);
             return parameters;
         }
 
-        public override TransactionSubcommandName SubcommandName
-        {
-            get
-            {
-                return TransactionSubcommandName.TRANS_QUERY_NMPIPE_STATE;
-            }
-        }
+        public override TransactionSubcommandName SubcommandName => TransactionSubcommandName.TRANS_QUERY_NMPIPE_STATE;
     }
 }

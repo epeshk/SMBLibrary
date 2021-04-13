@@ -4,11 +4,12 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Text;
+using MemoryPools.Memory;
 using SMBLibrary.RPC;
-using Utilities;
 
 namespace SMBLibrary.Services
 {
@@ -30,7 +31,7 @@ namespace SMBLibrary.Services
 
         public static BindAckPDU GetRPCBindResponse(BindPDU bindPDU, RemoteService service)
         {
-            BindAckPDU bindAckPDU = new BindAckPDU();
+            var bindAckPDU = new BindAckPDU();
             bindAckPDU.Flags = PacketFlags.FirstFragment | PacketFlags.LastFragment;
             bindAckPDU.DataRepresentation = bindPDU.DataRepresentation;
             bindAckPDU.CallID = bindPDU.CallID;
@@ -54,12 +55,13 @@ namespace SMBLibrary.Services
             bindAckPDU.SecondaryAddress = @"\PIPE\" + service.PipeName;
             bindAckPDU.MaxTransmitFragmentSize = bindPDU.MaxReceiveFragmentSize;
             bindAckPDU.MaxReceiveFragmentSize = bindPDU.MaxTransmitFragmentSize;
-            foreach (ContextElement element in bindPDU.ContextList)
+            for (var i = 0; i < bindPDU.ContextList.Count; i++)
             {
-                ResultElement resultElement = new ResultElement();
+                var element = bindPDU.ContextList[i];
+                var resultElement = new ResultElement();
                 if (element.AbstractSyntax.InterfaceUUID.Equals(service.InterfaceGuid))
                 {
-                    int index = IndexOfSupportedTransferSyntax(element.TransferSyntaxList);
+                    var index = IndexOfSupportedTransferSyntax(element.TransferSyntaxList);
                     if (index >= 0)
                     {
                         resultElement.Result = NegotiationResult.Acceptance;
@@ -84,6 +86,7 @@ namespace SMBLibrary.Services
                     resultElement.Result = NegotiationResult.ProviderRejection;
                     resultElement.Reason = RejectionReason.AbstractSyntaxNotSupported;
                 }
+
                 bindAckPDU.ResultList.Add(resultElement);
             }
 
@@ -92,12 +95,12 @@ namespace SMBLibrary.Services
 
         private static int IndexOfSupportedTransferSyntax(List<SyntaxID> syntaxList)
         {
-            List<SyntaxID> supportedTransferSyntaxes = new List<SyntaxID>();
+            var supportedTransferSyntaxes = new List<SyntaxID>();
             supportedTransferSyntaxes.Add(new SyntaxID(NDRTransferSyntaxIdentifier, 1));
             // [MS-RPCE] Version 2.0 data representation protocol:
             supportedTransferSyntaxes.Add(new SyntaxID(NDRTransferSyntaxIdentifier, 2));
 
-            for(int index = 0; index < syntaxList.Count; index++)
+            for(var index = 0; index < syntaxList.Count; index++)
             {
                 if (supportedTransferSyntaxes.Contains(syntaxList[index]))
                 {
@@ -109,15 +112,15 @@ namespace SMBLibrary.Services
 
         public static List<RPCPDU> GetRPCResponse(RequestPDU requestPDU, RemoteService service, int maxTransmitFragmentSize)
         {
-            List<RPCPDU> result = new List<RPCPDU>();
-            byte[] responseBytes;
+            var result = new List<RPCPDU>();
+            IMemoryOwner<byte> responseBytes;
             try
             {
                 responseBytes = service.GetResponseBytes(requestPDU.OpNum, requestPDU.Data);
             }
             catch (UnsupportedOpNumException)
             {
-                FaultPDU faultPDU = new FaultPDU();
+                var faultPDU = new FaultPDU();
                 faultPDU.Flags = PacketFlags.FirstFragment | PacketFlags.LastFragment | PacketFlags.DidNotExecute;
                 faultPDU.DataRepresentation = requestPDU.DataRepresentation;
                 faultPDU.CallID = requestPDU.CallID;
@@ -128,28 +131,28 @@ namespace SMBLibrary.Services
                 return result;
             }
 
-            int offset = 0;
-            int maxPDUDataLength = maxTransmitFragmentSize - RPCPDU.CommonFieldsLength - ResponsePDU.ResponseFieldsLength;
+            var offset = 0;
+            var maxPDUDataLength = maxTransmitFragmentSize - RPCPDU.CommonFieldsLength - ResponsePDU.ResponseFieldsLength;
             do
             {
-                ResponsePDU responsePDU = new ResponsePDU();
-                int pduDataLength = Math.Min(responseBytes.Length - offset, maxPDUDataLength);
+                var responsePDU = new ResponsePDU();
+                var pduDataLength = Math.Min(responseBytes.Length() - offset, maxPDUDataLength);
                 responsePDU.DataRepresentation = requestPDU.DataRepresentation;
                 responsePDU.CallID = requestPDU.CallID;
-                responsePDU.AllocationHint = (uint)(responseBytes.Length - offset);
-                responsePDU.Data = ByteReader.ReadBytes(responseBytes, offset, pduDataLength);
+                responsePDU.AllocationHint = (uint)(responseBytes.Length() - offset);
+                responsePDU.Data = Arrays.RentFrom<byte>(responseBytes.Memory.Span.Slice(offset, pduDataLength));
                 if (offset == 0)
                 {
                     responsePDU.Flags |= PacketFlags.FirstFragment;
                 }
-                if (offset + pduDataLength == responseBytes.Length)
+                if (offset + pduDataLength == responseBytes.Length())
                 {
                     responsePDU.Flags |= PacketFlags.LastFragment;
                 }
                 result.Add(responsePDU);
                 offset += pduDataLength;
             }
-            while (offset < responseBytes.Length);
+            while (offset < responseBytes.Length());
             
             return result;
         }

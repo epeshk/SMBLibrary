@@ -4,11 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
+
 using System.Collections.Generic;
-using System.Text;
-using SMBLibrary.SMB1;
-using Utilities;
+using MemoryPools.Memory;
+using SMBLibrary.Client;
 
 namespace SMBLibrary.Server.SMB1
 {
@@ -22,18 +21,18 @@ namespace SMBLibrary.Server.SMB1
         // '\Directory\exefile"*' (cmd.exe will use this syntax when entering an exe without its extension, explorer will use this opening a directory from the run menu)
         /// <param name="fileNamePattern">The filename pattern to search for. This field MAY contain wildcard characters</param>
         /// <exception cref="System.UnauthorizedAccessException"></exception>
-        public static NTStatus QueryDirectory(out List<QueryDirectoryFileInformation> result, INTFileStore fileStore, string fileNamePattern, FileInformationClass fileInformation, SecurityContext securityContext)
+        public static NTStatus QueryDirectory(out List<FindFilesQueryResult> result, INTFileStore fileStore, string fileNamePattern, FileInformationClass fileInformation, SecurityContext securityContext)
         {
-            int separatorIndex = fileNamePattern.LastIndexOf('\\');
+            var separatorIndex = fileNamePattern.LastIndexOf('\\');
             if (separatorIndex >= 0)
             {
-                string path = fileNamePattern.Substring(0, separatorIndex + 1);
-                string fileName = fileNamePattern.Substring(separatorIndex + 1);
+                var path = fileNamePattern.Substring(0, separatorIndex + 1);
+                var fileName = fileNamePattern.Substring(separatorIndex + 1);
                 object handle;
                 FileStatus fileStatus;
-                DirectoryAccessMask accessMask = DirectoryAccessMask.FILE_LIST_DIRECTORY | DirectoryAccessMask.FILE_TRAVERSE | DirectoryAccessMask.SYNCHRONIZE;
-                CreateOptions createOptions = CreateOptions.FILE_DIRECTORY_FILE | CreateOptions.FILE_SYNCHRONOUS_IO_NONALERT;
-                NTStatus status = fileStore.CreateFile(out handle, out fileStatus, path, (AccessMask)accessMask, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, createOptions, securityContext);
+                var accessMask = DirectoryAccessMask.FILE_LIST_DIRECTORY | DirectoryAccessMask.FILE_TRAVERSE | DirectoryAccessMask.SYNCHRONIZE;
+                var createOptions = CreateOptions.FILE_DIRECTORY_FILE | CreateOptions.FILE_SYNCHRONOUS_IO_NONALERT;
+                var status = fileStore.CreateFile(out handle, out fileStatus, Arrays.RentFrom<char>(path), (AccessMask)accessMask, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, createOptions, securityContext);
                 if (status != NTStatus.STATUS_SUCCESS)
                 {
                     result = null;
@@ -43,11 +42,9 @@ namespace SMBLibrary.Server.SMB1
                 fileStore.CloseFile(handle);
                 return status;
             }
-            else
-            {
-                result = null;
-                return NTStatus.STATUS_INVALID_PARAMETER;
-            }
+
+            result = null;
+            return NTStatus.STATUS_INVALID_PARAMETER;
         }
     }
 }

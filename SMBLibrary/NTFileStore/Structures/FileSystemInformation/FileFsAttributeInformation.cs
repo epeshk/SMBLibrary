@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary
@@ -24,43 +26,33 @@ namespace SMBLibrary
         /// </summary>
         public uint MaximumComponentNameLength;
         private uint FileSystemNameLength;
-        public string FileSystemName = String.Empty;
+        public IMemoryOwner<char> FileSystemName = MemoryOwner<char>.Empty;
 
         public FileFsAttributeInformation()
         {
         }
 
-        public FileFsAttributeInformation(byte[] buffer, int offset)
+        public FileFsAttributeInformation(Span<byte> buffer, int offset)
         {
             FileSystemAttributes = (FileSystemAttributes)LittleEndianConverter.ToUInt32(buffer, offset + 0);
             MaximumComponentNameLength = LittleEndianConverter.ToUInt32(buffer, offset + 4);
             FileSystemNameLength = LittleEndianConverter.ToUInt32(buffer, offset + 8);
-            FileSystemName = ByteReader.ReadUTF16String(buffer, offset + 12, (int)FileSystemNameLength / 2);
+            
+            FileSystemName = Arrays.Rent<char>((int) FileSystemNameLength / 2);
+            ByteReader.ReadUTF16String(FileSystemName.Memory.Span, buffer, offset + 12, (int)FileSystemNameLength / 2);
         }
 
-        public override void WriteBytes(byte[] buffer, int offset)
+        public override void WriteBytes(Span<byte> buffer, int offset)
         {
-            FileSystemNameLength = (uint)(FileSystemName.Length * 2);
+            FileSystemNameLength = (uint)(FileSystemName.Memory.Length * 2);
             LittleEndianWriter.WriteUInt32(buffer, offset + 0, (uint)FileSystemAttributes);
             LittleEndianWriter.WriteUInt32(buffer, offset + 4, MaximumComponentNameLength);
             LittleEndianWriter.WriteUInt32(buffer, offset + 8, FileSystemNameLength);
-            ByteWriter.WriteUTF16String(buffer, offset + 12, FileSystemName);
+            BufferWriter.WriteUTF16String(buffer, offset + 12, FileSystemName.Memory.Span);
         }
 
-        public override FileSystemInformationClass FileSystemInformationClass
-        {
-            get
-            {
-                return FileSystemInformationClass.FileFsAttributeInformation;
-            }
-        }
+        public override FileSystemInformationClass FileSystemInformationClass => FileSystemInformationClass.FileFsAttributeInformation;
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength + FileSystemName.Length * 2;
-            }
-        }
+        public override int Length => FixedLength + FileSystemName.Memory.Length * 2;
     }
 }

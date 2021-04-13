@@ -4,10 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.NetBios
@@ -32,15 +31,15 @@ namespace SMBLibrary.NetBios
         {
         }
 
-        public NameServicePacketHeader(byte[] buffer, ref int offset) : this(buffer, offset)
+        public NameServicePacketHeader(Span<byte> buffer, ref int offset) : this(buffer, offset)
         {
             offset += Length;
         }
 
-        public NameServicePacketHeader(byte[] buffer, int offset)
+        public NameServicePacketHeader(Span<byte> buffer, int offset)
         {
             TransactionID = BigEndianConverter.ToUInt16(buffer, offset + 0);
-            ushort temp = BigEndianConverter.ToUInt16(buffer, offset + 2);
+            var temp = BigEndianConverter.ToUInt16(buffer, offset + 2);
             ResultCode = (byte)(temp & 0xF);
             Flags = (OperationFlags)((temp >> 4) & 0x7F);
             OpCode = (NameServiceOperation)((temp >> 11) & 0x1F);
@@ -53,7 +52,7 @@ namespace SMBLibrary.NetBios
         public void WriteBytes(Stream stream)
         {
             BigEndianWriter.WriteUInt16(stream, TransactionID);
-            ushort temp = (ushort)(ResultCode & (0xF));
+            var temp = (ushort)(ResultCode & (0xF));
             temp |= (ushort)((byte)Flags << 4);
             temp |= (ushort)((byte)OpCode << 11);
             BigEndianWriter.WriteUInt16(stream, temp);

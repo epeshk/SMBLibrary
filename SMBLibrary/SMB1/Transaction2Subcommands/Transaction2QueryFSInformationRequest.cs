@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -20,66 +22,42 @@ namespace SMBLibrary.SMB1
         // Parameters:
         public ushort InformationLevel;
 
-        public Transaction2QueryFSInformationRequest() : base()
+        public Transaction2QueryFSInformationRequest()
         {
 
         }
 
-        public Transaction2QueryFSInformationRequest(byte[] parameters, byte[] data, bool isUnicode) : base()
+        public Transaction2QueryFSInformationRequest(IMemoryOwner<byte> parameters, IMemoryOwner<byte> data, bool isUnicode)
         {
             InformationLevel = LittleEndianConverter.ToUInt16(parameters, 0);
         }
 
-        public override byte[] GetSetup()
+        public override void GetSetupInto(Span<byte> target)
         {
-            return LittleEndianConverter.GetBytes((ushort)SubcommandName);
+            LittleEndianConverter.GetBytes(target, (ushort)SubcommandName);
         }
 
-        public override byte[] GetParameters(bool isUnicode)
+        public override IMemoryOwner<byte> GetParameters(bool isUnicode)
         {
-            byte[] parameters = new byte[ParametersLength];
-            LittleEndianWriter.WriteUInt16(parameters, 0, InformationLevel);
+            var parameters = Arrays.Rent(ParametersLength);
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 0, InformationLevel);
             return parameters;
         }
 
-        public bool IsPassthroughInformationLevel
-        {
-            get
-            {
-                return (InformationLevel >= SMB_INFO_PASSTHROUGH);
-            }
-        }
+        public bool IsPassthroughInformationLevel => (InformationLevel >= SMB_INFO_PASSTHROUGH);
 
         public QueryFSInformationLevel QueryFSInformationLevel
         {
-            get
-            {
-                return (QueryFSInformationLevel)InformationLevel;
-            }
-            set
-            {
-                InformationLevel = (ushort)value;
-            }
+            get => (QueryFSInformationLevel)InformationLevel;
+            set => InformationLevel = (ushort)value;
         }
 
         public FileSystemInformationClass FileSystemInformationClass
         {
-            get
-            {
-                return (FileSystemInformationClass)(InformationLevel - SMB_INFO_PASSTHROUGH);
-            }
-            set
-            {
-                InformationLevel = (ushort)((ushort)value + SMB_INFO_PASSTHROUGH);
-            }
+            get => (FileSystemInformationClass)(InformationLevel - SMB_INFO_PASSTHROUGH);
+            set => InformationLevel = (ushort)((ushort)value + SMB_INFO_PASSTHROUGH);
         }
 
-        public override Transaction2SubcommandName SubcommandName
-        {
-            get
-            {
-                return Transaction2SubcommandName.TRANS2_QUERY_FS_INFORMATION;
-            }
-        }
+        public override Transaction2SubcommandName SubcommandName => Transaction2SubcommandName.TRANS2_QUERY_FS_INFORMATION;
     }
 }

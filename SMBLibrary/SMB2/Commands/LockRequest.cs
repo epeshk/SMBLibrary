@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -24,37 +26,44 @@ namespace SMBLibrary.SMB2
         public FileID FileId;
         public List<LockElement> Locks;
 
-        public LockRequest() : base(SMB2CommandName.Lock)
+        public LockRequest()
         {
+            Init(SMB2CommandName.Lock);
             StructureSize = DeclaredSize;
         }
 
-        public LockRequest(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            ushort lockCount = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 2);
-            uint temp = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 4);
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            var lockCount = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 2);
+            var temp = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 4);
             LSN = (byte)(temp >> 28);
             LockSequenceIndex = (temp & 0x0FFFFFFF);
-            FileId = new FileID(buffer, offset + SMB2Header.Length + 8);
-            Locks = LockElement.ReadLockList(buffer, offset + SMB2Header.Length + 24, (int)lockCount);
+            FileId = ObjectsPool<FileID>.Get().Init(buffer, offset + Smb2Header.Length + 8);
+            Locks = LockElement.ReadLockList(buffer, offset + Smb2Header.Length + 24, lockCount);
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 2, (ushort)Locks.Count);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 4, (uint)(LSN & 0x0F) << 28 | (uint)(LockSequenceIndex & 0x0FFFFFFF));
-            FileId.WriteBytes(buffer, offset + 8);
-            LockElement.WriteLockList(buffer, offset + 24, Locks);
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            LittleEndianWriter.WriteUInt16(buffer, 2, (ushort)Locks.Count);
+            LittleEndianWriter.WriteUInt32(buffer, 4, (uint)(LSN & 0x0F) << 28 | LockSequenceIndex & 0x0FFFFFFF);
+            FileId.WriteBytes(buffer, 8);
+            LockElement.WriteLockList(buffer, 24, Locks);
         }
 
-        public override int CommandLength
+        public override void Dispose()
         {
-            get
-            {
-                return 48 + Locks.Count * LockElement.StructureLength;
-            }
+            base.Dispose();
+            
+            //FileId.Dispose(); - fileId handle is frequently used for multiple requests and can be disposed via ISMBFileStore.CloseFile(...) method.  
+            FileId = default;
+
+            ObjectsPool<LockRequest>.Return(this);
         }
+
+        public override int CommandLength => 48 + Locks.Count * LockElement.StructureLength;
     }
 }

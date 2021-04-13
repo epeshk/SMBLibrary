@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.IO;
 using Utilities;
 
@@ -24,34 +25,33 @@ namespace SMBLibrary.SMB1
         public byte BufferFormat;
         public string FileName; // SMB_STRING
 
-        public DeleteRequest() : base()
+        public DeleteRequest()
         {
             BufferFormat = SupportedBufferFormat;
         }
 
-        public DeleteRequest(byte[] buffer, int offset, bool isUnicode) : base(buffer, offset, isUnicode)
+        public override SMB1Command Init(Span<byte> buffer, int offset, bool isUnicode)
         {
-            SearchAttributes = (SMBFileAttributes)LittleEndianConverter.ToUInt16(this.SMBParameters, 0);
+            base.Init(buffer, offset, isUnicode);
+            
+            SearchAttributes = (SMBFileAttributes)LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 0);
 
-            BufferFormat = ByteReader.ReadByte(this.SMBData, 0);
+            BufferFormat = ByteReader.ReadByte(SmbData.Memory.Span, 0);
             if (BufferFormat != SupportedBufferFormat)
             {
                 throw new InvalidDataException("Unsupported Buffer Format");
             }
-            FileName = SMB1Helper.ReadSMBString(this.SMBData, 1, isUnicode);
+            
+            FileName = SMB1Helper.ReadSMBString(SmbData.Memory.Span, 1, isUnicode);
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
             throw new NotImplementedException();
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_DELETE;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_DELETE;
     }
 }

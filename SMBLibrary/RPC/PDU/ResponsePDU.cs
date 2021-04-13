@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.RPC
@@ -22,48 +23,50 @@ namespace SMBLibrary.RPC
         public ushort ContextID;
         public byte CancelCount;
         public byte Reserved;
-        public byte[] Data;
-        public byte[] AuthVerifier;
+        public IMemoryOwner<byte> Data;
+        public IMemoryOwner<byte> AuthVerifier;
 
-        public ResponsePDU() : base()
+        public ResponsePDU()
         {
             PacketType = PacketTypeName.Response;
-            AuthVerifier = new byte[0];
+            AuthVerifier = MemoryOwner<byte>.Empty;
         }
 
-        public ResponsePDU(byte[] buffer, int offset) : base(buffer, offset)
+        public ResponsePDU(Span<byte> buffer, int offset) : base(buffer, offset)
         {
             offset += CommonFieldsLength;
             AllocationHint = LittleEndianReader.ReadUInt32(buffer, ref offset);
             ContextID = LittleEndianReader.ReadUInt16(buffer, ref offset);
             CancelCount = ByteReader.ReadByte(buffer, ref offset);
             Reserved = ByteReader.ReadByte(buffer, ref offset);
-            int dataLength = FragmentLength - AuthLength - offset;
-            Data = ByteReader.ReadBytes(buffer, ref offset, dataLength);
-            AuthVerifier = ByteReader.ReadBytes(buffer, offset, AuthLength);
+            var dataLength = FragmentLength - AuthLength - offset;
+            Data = Arrays.RentFrom<byte>(buffer.Slice(offset, dataLength)); offset += dataLength;
+            AuthVerifier = Arrays.RentFrom<byte>(buffer.Slice(offset, AuthLength));
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            AuthLength = (ushort)AuthVerifier.Length;
-            byte[] buffer = new byte[Length];
-            WriteCommonFieldsBytes(buffer);
-            int offset = CommonFieldsLength;
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, AllocationHint);
-            LittleEndianWriter.WriteUInt16(buffer, ref offset, ContextID);
-            ByteWriter.WriteByte(buffer, ref offset, CancelCount);
-            ByteWriter.WriteByte(buffer, ref offset, Reserved);
-            ByteWriter.WriteBytes(buffer, ref offset, Data);
-            ByteWriter.WriteBytes(buffer, ref offset, AuthVerifier);
+            AuthLength = (ushort)AuthVerifier.Length();
+            var buffer = Arrays.Rent(Length);
+            WriteCommonFieldsBytes(buffer.Memory.Span);
+            var offset = CommonFieldsLength;
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, AllocationHint);
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, ref offset, ContextID);
+            BufferWriter.WriteByte(buffer.Memory.Span, ref offset, CancelCount);
+            BufferWriter.WriteByte(buffer.Memory.Span, ref offset, Reserved);
+            BufferWriter.WriteBytes(buffer.Memory.Span, ref offset, Data.Memory.Span);
+            BufferWriter.WriteBytes(buffer.Memory.Span, ref offset, AuthVerifier.Memory.Span);
             return buffer;
         }
 
-        public override int Length
+        public override int Length => CommonFieldsLength + ResponseFieldsLength + Data.Length() + AuthVerifier.Length();
+
+        public override void Dispose()
         {
-            get
-            {
-                return CommonFieldsLength + ResponseFieldsLength + Data.Length + AuthVerifier.Length;
-            }
+            base.Dispose();
+            Data.Dispose();
+            AuthVerifier.Dispose();
+            Data = AuthVerifier = null;
         }
     }
 }

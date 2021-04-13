@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("SMBLibrary.Win32")]
+[assembly: AssemblyTitle("SMBLibrary.STC.Win32")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Tal Aloni")]
-[assembly: AssemblyProduct("SMBLibrary.Win32")]
+[assembly: AssemblyProduct("SMBLibrary.STC.Win32")]
 [assembly: AssemblyCopyright("Copyright © Tal Aloni 2014-2020")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

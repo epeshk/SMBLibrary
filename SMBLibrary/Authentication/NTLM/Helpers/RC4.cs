@@ -6,9 +6,6 @@
  * 
  * Based on: https://bitlush.com/blog/rc4-encryption-in-c-sharp
  */
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace System.Security.Cryptography
 {
@@ -26,8 +23,8 @@ namespace System.Security.Cryptography
 
         private static byte[] EncryptInitalize(byte[] key)
         {
-            byte[] s = new byte[256];
-            for (int index = 0; index < 256; index++)
+            var s = new byte[256];
+            for (var index = 0; index < 256; index++)
             {
                 s[index] = (byte)index;
             }
@@ -44,13 +41,13 @@ namespace System.Security.Cryptography
 
         private static byte[] EncryptOutput(byte[] key, byte[] data)
         {
-            byte[] s = EncryptInitalize(key);
+            var s = EncryptInitalize(key);
 
-            int i = 0;
-            int j = 0;
+            var i = 0;
+            var j = 0;
 
-            byte[] output = new byte[data.Length];
-            for (int index = 0; index < data.Length; index++)
+            var output = new byte[data.Length];
+            for (var index = 0; index < data.Length; index++)
             {
                 i = (i + 1) & 255;
                 j = (j + s[i]) & 255;
@@ -63,7 +60,7 @@ namespace System.Security.Cryptography
 
         private static void Swap(byte[] s, int i, int j)
         {
-            byte c = s[i];
+            var c = s[i];
 
             s[i] = s[j];
             s[j] = c;

@@ -4,9 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -26,7 +25,7 @@ namespace SMBLibrary.SMB1
         {
         }
 
-        public FullExtendedAttribute(byte[] buffer, int offset)
+        public FullExtendedAttribute(Span<byte> buffer, int offset)
         {
             ExtendedAttributeFlag = (ExtendedAttributeFlags)ByteReader.ReadByte(buffer, offset);
             AttributeNameLengthInBytes = ByteReader.ReadByte(buffer, offset + 1);
@@ -35,23 +34,17 @@ namespace SMBLibrary.SMB1
             AttributeValue = ByteReader.ReadAnsiString(buffer, offset + 4 + AttributeNameLengthInBytes + 1, AttributeValueLengthInBytes);
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
             AttributeNameLengthInBytes = (byte)AttributeName.Length;
             AttributeValueLengthInBytes = (ushort)AttributeValue.Length;
-            ByteWriter.WriteByte(buffer, offset, (byte)ExtendedAttributeFlag);
-            ByteWriter.WriteByte(buffer, offset + 1, AttributeNameLengthInBytes);
+            BufferWriter.WriteByte(buffer, offset, (byte)ExtendedAttributeFlag);
+            BufferWriter.WriteByte(buffer, offset + 1, AttributeNameLengthInBytes);
             LittleEndianWriter.WriteUInt16(buffer, offset + 2, AttributeValueLengthInBytes);
-            ByteWriter.WriteAnsiString(buffer, offset + 4, AttributeName, AttributeName.Length);
-            ByteWriter.WriteAnsiString(buffer, offset + 4 + AttributeNameLengthInBytes + 1, AttributeValue, AttributeValue.Length);
+            BufferWriter.WriteAnsiString(buffer, offset + 4, AttributeName, AttributeName.Length);
+            BufferWriter.WriteAnsiString(buffer, offset + 4 + AttributeNameLengthInBytes + 1, AttributeValue, AttributeValue.Length);
         }
 
-        public int Length
-        {
-            get
-            {
-                return 4 + AttributeName.Length + 1 + AttributeValue.Length;
-            }
-        }
+        public int Length => 4 + AttributeName.Length + 1 + AttributeValue.Length;
     }
 }

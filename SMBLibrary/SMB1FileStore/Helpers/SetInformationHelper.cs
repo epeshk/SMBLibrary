@@ -4,10 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using SMBLibrary.SMB1;
-using Utilities;
 
 namespace SMBLibrary.SMB1
 {
@@ -17,8 +15,8 @@ namespace SMBLibrary.SMB1
         {
             if (information is SetFileBasicInfo)
             {
-                SetFileBasicInfo basicInfo = (SetFileBasicInfo)information;
-                FileBasicInformation fileBasicInfo = new FileBasicInformation();
+                var basicInfo = (SetFileBasicInfo)information;
+                var fileBasicInfo = new FileBasicInformation();
                 fileBasicInfo.CreationTime = basicInfo.CreationTime;
                 fileBasicInfo.LastAccessTime = basicInfo.LastAccessTime;
                 fileBasicInfo.LastWriteTime = basicInfo.LastWriteTime;
@@ -27,30 +25,31 @@ namespace SMBLibrary.SMB1
                 fileBasicInfo.Reserved = basicInfo.Reserved;
                 return fileBasicInfo;
             }
-            else if (information is SetFileDispositionInfo)
+
+            if (information is SetFileDispositionInfo)
             {
-                FileDispositionInformation fileDispositionInfo = new FileDispositionInformation();
+                var fileDispositionInfo = new FileDispositionInformation();
                 fileDispositionInfo.DeletePending = ((SetFileDispositionInfo)information).DeletePending;
                 return fileDispositionInfo;
             }
-            else if (information is SetFileAllocationInfo)
+
+            if (information is SetFileAllocationInfo)
             {
                 // This information level is used to set the file length in bytes.
                 // Note: the input will NOT be a multiple of the cluster size / bytes per sector.
-                FileAllocationInformation fileAllocationInfo = new FileAllocationInformation();
+                var fileAllocationInfo = new FileAllocationInformation();
                 fileAllocationInfo.AllocationSize = ((SetFileAllocationInfo)information).AllocationSize;
                 return fileAllocationInfo;
             }
-            else if (information is SetFileEndOfFileInfo)
+
+            if (information is SetFileEndOfFileInfo)
             {
-                FileEndOfFileInformation fileEndOfFileInfo = new FileEndOfFileInformation();
+                var fileEndOfFileInfo = new FileEndOfFileInformation();
                 fileEndOfFileInfo.EndOfFile = ((SetFileEndOfFileInfo)information).EndOfFile;
                 return fileEndOfFileInfo;
             }
-            else
-            {
-                throw new NotImplementedException();
-            }
+
+            throw new NotImplementedException();
         }
     }
 }

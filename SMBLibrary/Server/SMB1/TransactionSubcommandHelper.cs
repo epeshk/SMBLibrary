@@ -4,12 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
-using SMBLibrary.RPC;
+using System.Buffers;
+using MemoryPools.Memory;
 using SMBLibrary.SMB1;
-using SMBLibrary.Services;
 using Utilities;
 
 namespace SMBLibrary.Server.SMB1
@@ -18,8 +17,8 @@ namespace SMBLibrary.Server.SMB1
     {
         internal static TransactionTransactNamedPipeResponse GetSubcommandResponse(SMB1Header header, uint maxDataCount, TransactionTransactNamedPipeRequest subcommand, ISMBShare share, SMB1ConnectionState state)
         {
-            SMB1Session session = state.GetSession(header.UID);
-            OpenFileObject openFile = session.GetOpenFileObject(subcommand.FID);
+            var session = state.GetSession(header.UID);
+            var openFile = session.GetOpenFileObject(subcommand.FID);
             if (openFile == null)
             {
                 state.LogToServer(Severity.Verbose, "TransactNamedPipe failed. Invalid FID. (UID: {0}, TID: {1}, FID: {2})", header.UID, header.TID, subcommand.FID);
@@ -27,16 +26,16 @@ namespace SMBLibrary.Server.SMB1
                 return null;
             }
 
-            int maxOutputLength = (int)maxDataCount;
-            byte[] output;
+            var maxOutputLength = (int)maxDataCount;
+            IMemoryOwner<byte> output;
             header.Status = share.FileStore.DeviceIOControl(openFile.Handle, (uint)IoControlCode.FSCTL_PIPE_TRANSCEIVE, subcommand.WriteData, out output, maxOutputLength);
             if (header.Status != NTStatus.STATUS_SUCCESS && header.Status != NTStatus.STATUS_BUFFER_OVERFLOW)
             {
                 state.LogToServer(Severity.Verbose, "TransactNamedPipe failed. NTStatus: {0}.", header.Status);
                 return null;
             }
-            TransactionTransactNamedPipeResponse response = new TransactionTransactNamedPipeResponse();
-            response.ReadData = output;
+            var response = new TransactionTransactNamedPipeResponse();
+            response.ReadData = output.AddOwner();
             return response;
         }
 
@@ -49,14 +48,15 @@ namespace SMBLibrary.Server.SMB1
                 header.Status = NTStatus.STATUS_INVALID_SMB;
             }
 
-            string pipeName = name.Substring(6);
-            PipeWaitRequest pipeWaitRequest = new PipeWaitRequest();
+            var pipeName = name.Substring(6);
+            var pipeWaitRequest = new PipeWaitRequest();
             pipeWaitRequest.Timeout = timeout;
             pipeWaitRequest.TimeSpecified = true;
-            pipeWaitRequest.Name = pipeName;
-            byte[] input = pipeWaitRequest.GetBytes();
-            byte[] output;
+            pipeWaitRequest.Name = Arrays.RentFrom<char>(pipeName);
+            var input = pipeWaitRequest.GetBytes();
+            IMemoryOwner<byte> output;
             header.Status = share.FileStore.DeviceIOControl(null, (uint)IoControlCode.FSCTL_PIPE_WAIT, input, out output, 0);
+            output.Dispose();
             if (header.Status != NTStatus.STATUS_SUCCESS)
             {
                 state.LogToServer(Severity.Verbose, "TransactWaitNamedPipe failed. Pipe name: {0}. NTStatus: {1}.", pipeName, header.Status);

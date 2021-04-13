@@ -4,9 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -23,25 +22,19 @@ namespace SMBLibrary.SMB1
         {
         }
 
-        public ExtendedAttributeName(byte[] buffer, int offset)
+        public ExtendedAttributeName(Span<byte> buffer, int offset)
         {
             AttributeNameLengthInBytes = ByteReader.ReadByte(buffer, offset + 0);
             AttributeName = ByteReader.ReadAnsiString(buffer, offset + 1, AttributeNameLengthInBytes);
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
             AttributeNameLengthInBytes = (byte)AttributeName.Length;
-            ByteWriter.WriteByte(buffer, offset + 0, AttributeNameLengthInBytes);
-            ByteWriter.WriteAnsiString(buffer, offset + 1, AttributeName, AttributeName.Length);
+            BufferWriter.WriteByte(buffer, offset + 0, AttributeNameLengthInBytes);
+            BufferWriter.WriteAnsiString(buffer, offset + 1, AttributeName, AttributeName.Length);
         }
 
-        public int Length
-        {
-            get
-            {
-                return 1 + AttributeName.Length + 1;
-            }
-        }
+        public int Length => 1 + AttributeName.Length + 1;
     }
 }

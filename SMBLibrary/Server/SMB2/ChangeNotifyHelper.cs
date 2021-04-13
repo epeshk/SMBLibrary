@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
+
+using System.Buffers;
+using MemoryPools.Memory;
 using SMBLibrary.SMB2;
 using Utilities;
 
@@ -18,14 +19,14 @@ namespace SMBLibrary.Server.SMB2
         /// </remarks>
         internal static SMB2Command GetChangeNotifyInterimResponse(ChangeNotifyRequest request, ISMBShare share, SMB2ConnectionState state)
         {
-            SMB2Session session = state.GetSession(request.Header.SessionID);
-            OpenFileObject openFile = session.GetOpenFileObject(request.FileId);
-            bool watchTree = (request.Flags & ChangeNotifyFlags.WatchTree) > 0;
-            SMB2AsyncContext asyncContext = state.CreateAsyncContext(request.FileId, state, request.Header.SessionID, request.Header.TreeID);
+            var session = state.GetSession(request.Header.SessionId);
+            var openFile = session.GetOpenFileObject(request.FileId);
+            var watchTree = (request.Flags & ChangeNotifyFlags.WatchTree) > 0;
+            var asyncContext = state.CreateAsyncContext(request.FileId, state, request.Header.SessionId, request.Header.TreeId);
             // We have to make sure that we don't send an interim response after the final response.
             lock (asyncContext)
             {
-                NTStatus status = share.FileStore.NotifyChange(out asyncContext.IORequest, openFile.Handle, request.CompletionFilter, watchTree, (int)request.OutputBufferLength, OnNotifyChangeCompleted, asyncContext);
+                var status = share.FileStore.NotifyChange(out asyncContext.IORequest, openFile.Handle, request.CompletionFilter, watchTree, (int)request.OutputBufferLength, OnNotifyChangeCompleted, asyncContext);
                 if (status == NTStatus.STATUS_PENDING)
                 {
                     state.LogToServer(Severity.Verbose, "NotifyChange: Monitoring of '{0}{1}' started. AsyncID: {2}.", share.Name, openFile.Path, asyncContext.AsyncID);
@@ -42,28 +43,28 @@ namespace SMBLibrary.Server.SMB2
                     state.RemoveAsyncContext(asyncContext);
                 }
 
-                ErrorResponse response = new ErrorResponse(request.CommandName, status);
+                var response = ObjectsPool<ErrorResponse>.Get().Init(request.CommandName, status);
                 if (status == NTStatus.STATUS_PENDING)
                 {
                     response.Header.IsAsync = true;
-                    response.Header.AsyncID = asyncContext.AsyncID;
+                    response.Header.AsyncId = asyncContext.AsyncID;
                 }
                 return response;
             }
         }
 
-        private static void OnNotifyChangeCompleted(NTStatus status, byte[] buffer, object context)
+        private static void OnNotifyChangeCompleted(NTStatus status, IMemoryOwner<byte> buffer, object context)
         {
-            SMB2AsyncContext asyncContext = (SMB2AsyncContext)context;
+            var asyncContext = (SMB2AsyncContext)context;
             // Wait until the interim response has been sent
             lock (asyncContext)
             {
-                SMB2ConnectionState connection = asyncContext.Connection;
+                var connection = asyncContext.Connection;
                 connection.RemoveAsyncContext(asyncContext);
-                SMB2Session session = connection.GetSession(asyncContext.SessionID);
+                var session = connection.GetSession(asyncContext.SessionID);
                 if (session != null)
                 {
-                    OpenFileObject openFile = session.GetOpenFileObject(asyncContext.FileID);
+                    var openFile = session.GetOpenFileObject(asyncContext.FileID);
                     if (openFile != null)
                     {
                         connection.LogToServer(Severity.Verbose, "NotifyChange: Monitoring of '{0}{1}' completed. NTStatus: {2}. AsyncID: {3}", openFile.ShareName, openFile.Path, status, asyncContext.AsyncID);
@@ -73,12 +74,12 @@ namespace SMBLibrary.Server.SMB2
                         status == NTStatus.STATUS_NOTIFY_CLEANUP ||
                         status == NTStatus.STATUS_NOTIFY_ENUM_DIR)
                     {
-                        ChangeNotifyResponse response = new ChangeNotifyResponse();
+                        var response = new ChangeNotifyResponse();
                         response.Header.Status = status;
                         response.Header.IsAsync = true;
                         response.Header.IsSigned = session.SigningRequired;
-                        response.Header.AsyncID = asyncContext.AsyncID;
-                        response.Header.SessionID = asyncContext.SessionID;
+                        response.Header.AsyncId = asyncContext.AsyncID;
+                        response.Header.SessionId = asyncContext.SessionID;
                         response.OutputBuffer = buffer;
 
                         SMBServer.EnqueueResponse(connection, response);
@@ -86,11 +87,11 @@ namespace SMBLibrary.Server.SMB2
                     else
                     {
                         // [MS-SMB2] If the object store returns an error, the server MUST fail the request with the error code received.
-                        ErrorResponse response = new ErrorResponse(SMB2CommandName.ChangeNotify);
+                        var response = ObjectsPool<ErrorResponse>.Get().Init(SMB2CommandName.ChangeNotify);
                         response.Header.Status = status;
                         response.Header.IsAsync = true;
                         response.Header.IsSigned = session.SigningRequired;
-                        response.Header.AsyncID = asyncContext.AsyncID;
+                        response.Header.AsyncId = asyncContext.AsyncID;
 
                         SMBServer.EnqueueResponse(connection, response);
                     }

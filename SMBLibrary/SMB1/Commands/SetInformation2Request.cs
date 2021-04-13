@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -19,39 +20,42 @@ namespace SMBLibrary.SMB1
         public const int ParametersLength = 14;
         // Parameters:
         public ushort FID;
-        public DateTime? CreationDateTime; // A date and time value of 0 indicates to the server that the values MUST NOT be changed
+        public DateTime? CreationDateTime;   // A date and time value of 0 indicates to the server that the values MUST NOT be changed
         public DateTime? LastAccessDateTime; // A date and time value of 0 indicates to the server that the values MUST NOT be changed
-        public DateTime? LastWriteDateTime; // A date and time value of 0 indicates to the server that the values MUST NOT be changed
+        public DateTime? LastWriteDateTime;  // A date and time value of 0 indicates to the server that the values MUST NOT be changed
 
-        public SetInformation2Request() : base()
+        public override SMB1Command Init()
         {
+            FID = default;
+            CreationDateTime = default;   
+            LastAccessDateTime = default; 
+            LastWriteDateTime = default;
+            return this;
         }
 
-        public SetInformation2Request(byte[] buffer, int offset) : base(buffer, offset, false)
+        public SetInformation2Request Init(Span<byte> buffer, int offset)
         {
-            FID = LittleEndianConverter.ToUInt16(this.SMBParameters, 0);
-            CreationDateTime = SMB1Helper.ReadNullableSMBDateTime(this.SMBParameters, 2);
-            LastAccessDateTime = SMB1Helper.ReadNullableSMBDateTime(this.SMBParameters, 6);
-            LastWriteDateTime = SMB1Helper.ReadNullableSMBDateTime(this.SMBParameters, 10);
+            base.Init(buffer, offset, false);
+            
+            FID = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 0);
+            CreationDateTime = SMB1Helper.ReadNullableSMBDateTime(SmbParameters.Memory.Span, 2);
+            LastAccessDateTime = SMB1Helper.ReadNullableSMBDateTime(SmbParameters.Memory.Span, 6);
+            LastWriteDateTime = SMB1Helper.ReadNullableSMBDateTime(SmbParameters.Memory.Span, 10);
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            this.SMBParameters = new byte[ParametersLength];
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 0, FID);
-            SMB1Helper.WriteSMBDateTime(this.SMBParameters, 2, CreationDateTime);
-            SMB1Helper.WriteSMBDateTime(this.SMBParameters, 6, LastAccessDateTime);
-            SMB1Helper.WriteSMBDateTime(this.SMBParameters, 10, LastWriteDateTime);
+            SmbParameters = Arrays.Rent(ParametersLength);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 0, FID);
+            SMB1Helper.WriteSMBDateTime(SmbParameters.Memory.Span, 2, CreationDateTime);
+            SMB1Helper.WriteSMBDateTime(SmbParameters.Memory.Span, 6, LastAccessDateTime);
+            SMB1Helper.WriteSMBDateTime(SmbParameters.Memory.Span, 10, LastWriteDateTime);
 
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_SET_INFORMATION2;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_SET_INFORMATION2;
     }
 }

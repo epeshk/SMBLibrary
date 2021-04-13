@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using System.IO;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary
@@ -15,33 +16,31 @@ namespace SMBLibrary
     {
         public NTStatus GetFileInformation(out FileInformation result, object handle, FileInformationClass informationClass)
         {
-            FileHandle fileHandle = (FileHandle)handle;
-            string path = fileHandle.Path;
+            var fileHandle = (FileHandle)handle;
+            var path = fileHandle.Path;
             FileSystemEntry entry;
             try
             {
-                entry = m_fileSystem.GetEntry(path);
+                entry = m_fileSystem.GetEntry(path.Memory.ToString());
             }
             catch (Exception ex)
             {
                 if (ex is IOException || ex is UnauthorizedAccessException)
                 {
-                    NTStatus status = ToNTStatus(ex);
+                    var status = ToNTStatus(ex);
                     Log(Severity.Verbose, "GetFileInformation on '{0}' failed. {1}", path, status);
                     result = null;
                     return status;
                 }
-                else
-                {
-                    throw;
-                }
+
+                throw;
             }
 
             switch (informationClass)
             {
                 case FileInformationClass.FileBasicInformation:
                     {
-                        FileBasicInformation information = new FileBasicInformation();
+                        var information = new FileBasicInformation();
                         information.CreationTime = entry.CreationTime;
                         information.LastAccessTime = entry.LastAccessTime;
                         information.LastWriteTime = entry.LastWriteTime;
@@ -52,7 +51,7 @@ namespace SMBLibrary
                     }
                 case FileInformationClass.FileStandardInformation:
                     {
-                        FileStandardInformation information = new FileStandardInformation();
+                        var information = new FileStandardInformation();
                         information.AllocationSize = (long)GetAllocationSize(entry.Size);
                         information.EndOfFile = (long)entry.Size;
                         information.Directory = entry.IsDirectory;
@@ -62,13 +61,13 @@ namespace SMBLibrary
                     }
                 case FileInformationClass.FileInternalInformation:
                     {
-                        FileInternalInformation information = new FileInternalInformation();
+                        var information = new FileInternalInformation();
                         result = information;
                         return NTStatus.STATUS_SUCCESS;
                     }
                 case FileInformationClass.FileEaInformation:
                     {
-                        FileEaInformation information = new FileEaInformation();
+                        var information = new FileEaInformation();
                         information.EaSize = 0;
                         result = information;
                         return NTStatus.STATUS_SUCCESS;
@@ -80,8 +79,8 @@ namespace SMBLibrary
                     }
                 case FileInformationClass.FileNameInformation:
                     {
-                        FileNameInformation information = new FileNameInformation();
-                        information.FileName = entry.Name;
+                        var information = new FileNameInformation();
+                        information.FileName = Arrays.RentFrom<char>(entry.Name);
                         result = information;
                         return NTStatus.STATUS_SUCCESS;
                     }
@@ -107,7 +106,7 @@ namespace SMBLibrary
                     }
                 case FileInformationClass.FileAllInformation:
                     {
-                        FileAllInformation information = new FileAllInformation();
+                        var information = new FileAllInformation();
                         information.BasicInformation.CreationTime = entry.CreationTime;
                         information.BasicInformation.LastAccessTime = entry.LastAccessTime;
                         information.BasicInformation.LastWriteTime = entry.LastWriteTime;
@@ -117,7 +116,7 @@ namespace SMBLibrary
                         information.StandardInformation.EndOfFile = (long)entry.Size;
                         information.StandardInformation.Directory = entry.IsDirectory;
                         information.StandardInformation.DeletePending = fileHandle.DeleteOnClose;
-                        information.NameInformation.FileName = entry.Name;
+                        information.NameInformation.FileName = Arrays.RentFrom<char>(entry.Name);
                         result = information;
                         return NTStatus.STATUS_SUCCESS;
                     }
@@ -131,17 +130,19 @@ namespace SMBLibrary
                     {
                         // This information class is used to enumerate the data streams of a file or a directory.
                         // A buffer of FileStreamInformation data elements is returned by the server.
-                        FileStreamInformation information = new FileStreamInformation();
-                        List<KeyValuePair<string, ulong>> dataStreams = m_fileSystem.ListDataStreams(fileHandle.Path);
-                        foreach (KeyValuePair<string, ulong> dataStream in dataStreams)
+                        var information = new FileStreamInformation();
+                        var dataStreams = m_fileSystem.ListDataStreams(fileHandle.Path.Memory.ToString());
+                        for (var index = 0; index < dataStreams.Count; index++)
                         {
-                            FileStreamEntry streamEntry = new FileStreamEntry();
-                            ulong streamSize = dataStream.Value;
-                            streamEntry.StreamSize = (long)streamSize;
-                            streamEntry.StreamAllocationSize = (long)GetAllocationSize(streamSize);
-                            streamEntry.StreamName = dataStream.Key;
+                            var dataStream = dataStreams[index];
+                            var streamEntry = new FileStreamEntry();
+                            var streamSize = dataStream.Value;
+                            streamEntry.StreamSize = (long) streamSize;
+                            streamEntry.StreamAllocationSize = (long) GetAllocationSize(streamSize);
+                            streamEntry.StreamName = Arrays.RentFrom<char>(dataStream.Key);
                             information.Entries.Add(streamEntry);
                         }
+
                         result = information;
                         return NTStatus.STATUS_SUCCESS;
                     }
@@ -167,7 +168,7 @@ namespace SMBLibrary
                     }
                 case FileInformationClass.FileNetworkOpenInformation:
                     {
-                        FileNetworkOpenInformation information = new FileNetworkOpenInformation();
+                        var information = new FileNetworkOpenInformation();
                         information.CreationTime = entry.CreationTime;
                         information.LastAccessTime = entry.LastAccessTime;
                         information.LastWriteTime = entry.LastWriteTime;
@@ -194,22 +195,22 @@ namespace SMBLibrary
             FileAttributes attributes = 0;
             if (entry.IsHidden)
             {
-                attributes |= FileAttributes.Hidden;
+                attributes.Value |= FileAttributes.Hidden;
             }
             if (entry.IsReadonly)
             {
-                attributes |= FileAttributes.ReadOnly;
+                attributes.Value |= FileAttributes.ReadOnly;
             }
             if (entry.IsArchived)
             {
-                attributes |= FileAttributes.Archive;
+                attributes.Value |= FileAttributes.Archive;
             }
             if (entry.IsDirectory)
             {
-                attributes |= FileAttributes.Directory;
+                attributes.Value |= FileAttributes.Directory;
             }
 
-            if (attributes == 0)
+            if (attributes.Value == 0)
             {
                 attributes = FileAttributes.Normal;
             }

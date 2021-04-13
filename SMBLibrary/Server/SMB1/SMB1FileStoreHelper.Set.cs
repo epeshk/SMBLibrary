@@ -4,12 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text;
+
 using SMBLibrary.SMB1;
-using Utilities;
 
 namespace SMBLibrary.Server.SMB1
 {
@@ -17,7 +13,7 @@ namespace SMBLibrary.Server.SMB1
     {
         public static NTStatus SetFileInformation(INTFileStore fileStore, object handle, SetInformation information)
         {
-            FileInformation fileInformation = SetInformationHelper.ToFileInformation(information);
+            var fileInformation = SetInformationHelper.ToFileInformation(information);
             return fileStore.SetFileInformation(handle, fileInformation);
         }
     }

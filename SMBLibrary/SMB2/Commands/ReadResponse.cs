@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -24,54 +26,66 @@ namespace SMBLibrary.SMB2
         private uint DataLength;
         public uint DataRemaining;
         public uint Reserved2;
-        public byte[] Data = new byte[0];
+        public IMemoryOwner<byte> Data = MemoryOwner<byte>.Empty;
 
-        public ReadResponse() : base(SMB2CommandName.Read)
+        public ReadResponse Init()
         {
+            DataOffset = default;
+            Reserved = default;
+            DataLength = default;
+            DataRemaining = default;
+            Reserved2 = default;
+            
+            Init(SMB2CommandName.Read);
             Header.IsResponse = true;
             StructureSize = DeclaredSize;
+            return this;
         }
 
-        public ReadResponse(byte[] buffer, int offset) : base(buffer, offset)
+        public override void Dispose()
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            DataOffset = ByteReader.ReadByte(buffer, offset + SMB2Header.Length + 2);
-            Reserved = ByteReader.ReadByte(buffer, offset + SMB2Header.Length + 3);
-            DataLength = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 4);
-            DataRemaining = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 8);
-            Reserved2 = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 12);
+            base.Dispose();
+            Data?.Dispose();
+            Data = null;
+            ObjectsPool<ReadResponse>.Return(this);
+        }
+        
+        public override SMB2Command Init(Span<byte> buffer, int offset)
+        {
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            DataOffset = ByteReader.ReadByte(buffer, offset + Smb2Header.Length + 2);
+            Reserved = ByteReader.ReadByte(buffer, offset + Smb2Header.Length + 3);
+            DataLength = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 4);
+            DataRemaining = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 8);
+            Reserved2 = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 12);
             if (DataLength > 0)
             {
-                Data = ByteReader.ReadBytes(buffer, offset + DataOffset, (int)DataLength);
+                Data = Arrays.RentFrom<byte>(buffer.Slice(offset + DataOffset, (int)DataLength));
             }
+            return this;
         }
-
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
             DataOffset = 0;
-            DataLength = (uint)Data.Length;
-            if (Data.Length > 0)
+            DataLength = (uint)Data.Length();
+            if (Data.Length() > 0)
             {
-                DataOffset = SMB2Header.Length + FixedSize;
+                DataOffset = Smb2Header.Length + FixedSize;
             }
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            ByteWriter.WriteByte(buffer, offset + 2, DataOffset);
-            ByteWriter.WriteByte(buffer, offset + 3, Reserved);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 4, DataLength);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 8, DataRemaining);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 12, Reserved2);
-            if (Data.Length > 0)
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            BufferWriter.WriteByte(buffer, 2, DataOffset);
+            BufferWriter.WriteByte(buffer, 3, Reserved);
+            LittleEndianWriter.WriteUInt32(buffer, 4, DataLength);
+            LittleEndianWriter.WriteUInt32(buffer, 8, DataRemaining);
+            LittleEndianWriter.WriteUInt32(buffer, 12, Reserved2);
+            if (Data.Length() > 0)
             {
-                ByteWriter.WriteBytes(buffer, offset + FixedSize, Data);
+                BufferWriter.WriteBytes(buffer, FixedSize, Data.Memory.Span);
             }
         }
 
-        public override int CommandLength
-        {
-            get
-            {
-                return FixedSize + Data.Length;
-            }
-        }
+        public override int CommandLength => FixedSize + Data.Length();
     }
 }

@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -21,13 +23,13 @@ namespace SMBLibrary.SMB1
         public ushort FID;
         public ushort InformationLevel; // This field MUST be a pass-through Information Level.
         // Data:
-        public byte[] InformationBytes;
+        public IMemoryOwner<byte> InformationBytes;
 
-        public Transaction2SetFSInformationRequest() : base()
+        public Transaction2SetFSInformationRequest()
         {
         }
 
-        public Transaction2SetFSInformationRequest(byte[] parameters, byte[] data, bool isUnicode) : base()
+        public Transaction2SetFSInformationRequest(IMemoryOwner<byte> parameters, IMemoryOwner<byte> data, bool isUnicode)
         {
             FID = LittleEndianConverter.ToUInt16(parameters, 0);
             InformationLevel = LittleEndianConverter.ToUInt16(parameters, 2);
@@ -35,42 +37,30 @@ namespace SMBLibrary.SMB1
             InformationBytes = data;
         }
 
-        public override byte[] GetSetup()
+        public override void GetSetupInto(Span<byte> target)
         {
-            return LittleEndianConverter.GetBytes((ushort)SubcommandName);
+            LittleEndianConverter.GetBytes(target, (ushort)SubcommandName);
         }
 
-        public override byte[] GetParameters(bool isUnicode)
+        public override IMemoryOwner<byte> GetParameters(bool isUnicode)
         {
-            byte[] parameters = new byte[ParametersLength];
+            var parameters = Arrays.Rent(ParametersLength);
             LittleEndianWriter.WriteUInt16(parameters, 0, FID);
             LittleEndianWriter.WriteUInt16(parameters, 2, InformationLevel);
             return parameters;
         }
 
-        public override byte[] GetData(bool isUnicode)
+        public override IMemoryOwner<byte> GetData(bool isUnicode)
         {
             return InformationBytes;
         }
 
-        public bool IsPassthroughInformationLevel
-        {
-            get
-            {
-                return (InformationLevel >= SMB_INFO_PASSTHROUGH);
-            }
-        }
+        public bool IsPassthroughInformationLevel => (InformationLevel >= SMB_INFO_PASSTHROUGH);
 
         public FileSystemInformationClass FileSystemInformationClass
         {
-            get
-            {
-                return (FileSystemInformationClass)(InformationLevel - SMB_INFO_PASSTHROUGH);
-            }
-            set
-            {
-                InformationLevel = (ushort)((ushort)value + SMB_INFO_PASSTHROUGH);
-            }
+            get => (FileSystemInformationClass)(InformationLevel - SMB_INFO_PASSTHROUGH);
+            set => InformationLevel = (ushort)((ushort)value + SMB_INFO_PASSTHROUGH);
         }
 
         /// <remarks>
@@ -82,12 +72,12 @@ namespace SMBLibrary.SMB1
             InformationBytes = information.GetBytes();
         }
 
-        public override Transaction2SubcommandName SubcommandName
+        public override Transaction2SubcommandName SubcommandName => Transaction2SubcommandName.TRANS2_SET_FS_INFORMATION;
+
+        public override void Dispose()
         {
-            get
-            {
-                return Transaction2SubcommandName.TRANS2_SET_FS_INFORMATION;
-            }
+            base.Dispose();
+            InformationBytes.Dispose();
         }
     }
 }

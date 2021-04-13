@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -24,47 +25,52 @@ namespace SMBLibrary.SMB2
         private ushort PathLength;
         public string Path = String.Empty;
 
-        public TreeConnectRequest() : base(SMB2CommandName.TreeConnect)
+        public TreeConnectRequest Init()
         {
+            base.Init(SMB2CommandName.TreeConnect);
             StructureSize = DeclaredSize;
+
+            return this;
         }
 
-        public TreeConnectRequest(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            Reserved = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 2);
-            PathOffset = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 4);
-            PathLength = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 6);
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            Reserved = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 2);
+            PathOffset = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 4);
+            PathLength = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 6);
             if (PathLength > 0)
             {
                 Path = ByteReader.ReadUTF16String(buffer, offset + PathOffset, PathLength / 2);
             }
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
             PathOffset = 0;
             PathLength = (ushort)(Path.Length * 2);
             if (Path.Length > 0)
             {
-                PathOffset = SMB2Header.Length + 8;
+                PathOffset = Smb2Header.Length + 8;
             }
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 2, Reserved);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 4, PathOffset);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 6, PathLength);
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            LittleEndianWriter.WriteUInt16(buffer, 2, Reserved);
+            LittleEndianWriter.WriteUInt16(buffer, 4, PathOffset);
+            LittleEndianWriter.WriteUInt16(buffer, 6, PathLength);
             if (Path.Length > 0)
             {
-                ByteWriter.WriteUTF16String(buffer, offset + 8, Path);
+                BufferWriter.WriteUTF16String(buffer, 8, Path);
             }
         }
 
-        public override int CommandLength
+        public override void Dispose()
         {
-            get
-            {
-                return 8 + Path.Length * 2;
-            }
+            base.Dispose();
+            ObjectsPool<TreeConnectRequest>.Return(this);
         }
+
+        public override int CommandLength => 8 + Path.Length * 2;
     }
 }

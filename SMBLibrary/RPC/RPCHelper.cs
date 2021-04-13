@@ -4,9 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.RPC
@@ -16,28 +15,28 @@ namespace SMBLibrary.RPC
         /// <summary>
         /// Read port_any_t string structure
         /// </summary>
-        public static string ReadPortAddress(byte[] buffer, int offset)
+        public static string ReadPortAddress(Span<byte> buffer, int offset)
         {
-            ushort length = LittleEndianConverter.ToUInt16(buffer, offset + 0);
+            var length = LittleEndianConverter.ToUInt16(buffer, offset + 0);
             // The length includes the C NULL string termination
             return ByteReader.ReadAnsiString(buffer, offset + 2, length - 1);
         }
 
-        public static string ReadPortAddress(byte[] buffer, ref int offset)
+        public static string ReadPortAddress(Span<byte> buffer, ref int offset)
         {
-            string result = ReadPortAddress(buffer, offset);
+            var result = ReadPortAddress(buffer, offset);
             offset += result.Length + 3;
             return result;
         }
 
-        public static void WritePortAddress(byte[] buffer, int offset, string value)
+        public static void WritePortAddress(Span<byte> buffer, int offset, string value)
         {
-            ushort length = (ushort)(value.Length + 1);
+            var length = (ushort)(value.Length + 1);
             LittleEndianWriter.WriteUInt16(buffer, offset + 0, length);
-            ByteWriter.WriteNullTerminatedAnsiString(buffer, offset + 2, value);
+            BufferWriter.WriteNullTerminatedAnsiString(buffer, offset + 2, value);
         }
 
-        public static void WritePortAddress(byte[] buffer, ref int offset, string value)
+        public static void WritePortAddress(Span<byte> buffer, ref int offset, string value)
         {
             WritePortAddress(buffer, offset, value);
             offset += value.Length + 3;

@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary
@@ -23,18 +24,18 @@ namespace SMBLibrary
         {
         }
 
-        public RequestGetDfsReferral(byte[] buffer)
+        public RequestGetDfsReferral(Span<byte> buffer)
         {
             MaxReferralLevel = LittleEndianConverter.ToUInt16(buffer, 0);
             RequestFileName = ByteReader.ReadNullTerminatedUTF16String(buffer, 2);
         }
 
-        public byte[] GetBytes()
+        public IMemoryOwner<byte> GetBytes()
         {
-            int length = 2 + RequestFileName.Length * 2 + 2;
-            byte[] buffer = new byte[length];
-            LittleEndianWriter.WriteUInt16(buffer, 0, MaxReferralLevel);
-            ByteWriter.WriteUTF16String(buffer, 2, RequestFileName);
+            var length = 2 + RequestFileName.Length * 2 + 2;
+            var buffer = Arrays.Rent(length);
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, 0, MaxReferralLevel);
+            BufferWriter.WriteUTF16String(buffer.Memory.Span, 2, RequestFileName);
             return buffer;
         }
     }

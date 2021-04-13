@@ -4,9 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.IO;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -21,24 +23,31 @@ namespace SMBLibrary.SMB1
         public byte BufferFormat;
         public string DirectoryName; // SMB_STRING
 
-        public DeleteDirectoryRequest() : base()
+        public override SMB1Command Init()
         {
             BufferFormat = SupportedBufferFormat;
+            DirectoryName = default;
+
+            return this;
         }
 
-        public DeleteDirectoryRequest(byte[] buffer, int offset, bool isUnicode) : base(buffer, offset, isUnicode)
+        public override SMB1Command Init(Span<byte> buffer, int offset, bool isUnicode)
         {
-            BufferFormat = ByteReader.ReadByte(this.SMBData, 0);
+            base.Init(buffer, offset, isUnicode);
+            
+            BufferFormat = ByteReader.ReadByte(SmbData.Memory.Span, 0);
             if (BufferFormat != SupportedBufferFormat)
             {
                 throw new InvalidDataException("Unsupported Buffer Format");
             }
-            DirectoryName = SMB1Helper.ReadSMBString(this.SMBData, 1, isUnicode);
+            DirectoryName = SMB1Helper.ReadSMBString(SmbData.Memory.Span, 1, isUnicode);
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            int length = 1;
+            var length = 1;
             if (isUnicode)
             {
                 length += DirectoryName.Length * 2 + 2;
@@ -47,18 +56,12 @@ namespace SMBLibrary.SMB1
             {
                 length += DirectoryName.Length + 1;
             }
-            this.SMBData = new byte[length];
-            ByteWriter.WriteByte(this.SMBData, 0, BufferFormat);
-            SMB1Helper.WriteSMBString(this.SMBData, 1, isUnicode, DirectoryName);
+            SmbData = Arrays.Rent(length);
+            BufferWriter.WriteByte(SmbData.Memory.Span, 0, BufferFormat);
+            SMB1Helper.WriteSMBString(SmbData.Memory.Span, 1, isUnicode, DirectoryName);
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_DELETE_DIRECTORY;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_DELETE_DIRECTORY;
     }
 }

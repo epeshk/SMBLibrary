@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -18,102 +19,110 @@ namespace SMBLibrary.SMB1
     {
         public const int FixedSMBParametersLength = 36;
         // Parameters:
-        public byte[] Reserved1; // 3 bytes
+        public IMemoryOwner<byte> Reserved1; // 3 bytes
         public uint TotalParameterCount;
         public uint TotalDataCount;
-        //uint ParameterCount;
-        //uint ParameterOffset;
         public uint ParameterDisplacement;
-        //uint DataCount;
-        //uint DataOffset;
         public uint DataDisplacement;
-        //byte SetupCount; // In 2-byte words
-        public byte[] Setup;
+        public IMemoryOwner<byte> Setup;
         // Data:
-        // Padding (alignment to 4 byte boundary)
-        public byte[] TransParameters; // Trans_Parameters
-        // Padding (alignment to 4 byte boundary)
-        public byte[] TransData; // Trans_Data
+        public IMemoryOwner<byte> TransParameters; // Trans_Parameters
+        public IMemoryOwner<byte> TransData; // Trans_Data
 
-        public NTTransactResponse() : base()
+        public override SMB1Command Init()
         {
-            Reserved1 = new byte[3];
+            base.Init();
+            TotalParameterCount = default;
+            TotalDataCount = default;
+            ParameterDisplacement = default;
+            DataDisplacement = default;
+            Setup = MemoryOwner<byte>.Empty;
+            TransParameters = MemoryOwner<byte>.Empty; // Trans_Parameters
+            TransData = MemoryOwner<byte>.Empty; // Trans_Data
+            Reserved1 = Arrays.Rent(3);
+            return this;
         }
 
-        public NTTransactResponse(byte[] buffer, int offset) : base(buffer, offset, false)
+        public NTTransactResponse Init(Span<byte> buffer, int offset)
         {
-            int readOffset = 0;
-            Reserved1 = ByteReader.ReadBytes(this.SMBParameters, ref readOffset, 3);
-            TotalParameterCount = LittleEndianReader.ReadUInt32(this.SMBParameters, ref readOffset);
-            TotalDataCount = LittleEndianReader.ReadUInt32(this.SMBParameters, ref readOffset);
-            uint parameterCount = LittleEndianReader.ReadUInt32(this.SMBParameters, ref readOffset);
-            uint parameterOffset = LittleEndianReader.ReadUInt32(this.SMBParameters, ref readOffset);
-            ParameterDisplacement = LittleEndianReader.ReadUInt32(this.SMBParameters, ref readOffset);
-            uint dataCount = LittleEndianReader.ReadUInt32(this.SMBParameters, ref readOffset);
-            uint dataOffset = LittleEndianReader.ReadUInt32(this.SMBParameters, ref readOffset);
-            DataDisplacement = LittleEndianReader.ReadUInt32(this.SMBParameters, ref readOffset);
-            byte setupCount = ByteReader.ReadByte(this.SMBParameters, ref readOffset);
-            Setup = ByteReader.ReadBytes(this.SMBParameters, ref offset, setupCount * 2);
+            base.Init(buffer, offset, false);
+            var readOffset = 0;
+            Reserved1 = Arrays.RentFrom<byte>(SmbParameters.Memory.Span.Slice(readOffset, 3)); readOffset += 3;
+            TotalParameterCount = LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref readOffset);
+            TotalDataCount = LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref readOffset);
+            var parameterCount = LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref readOffset);
+            var parameterOffset = LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref readOffset);
+            ParameterDisplacement = LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref readOffset);
+            var dataCount = LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref readOffset);
+            var dataOffset = LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref readOffset);
+            DataDisplacement = LittleEndianReader.ReadUInt32(SmbParameters.Memory.Span, ref readOffset);
+            var setupCount = ByteReader.ReadByte(SmbParameters.Memory.Span, ref readOffset);
+            Setup = Arrays.RentFrom<byte>(SmbParameters.Memory.Span.Slice(offset, setupCount * 2)); offset += setupCount * 2;
 
-            TransParameters = ByteReader.ReadBytes(buffer, (int)parameterOffset, (int)parameterCount);
-            TransData = ByteReader.ReadBytes(buffer, (int)dataOffset, (int)dataCount);
+            TransParameters = Arrays.RentFrom<byte>(buffer.Slice((int)parameterOffset, (int)parameterCount));
+            TransData = Arrays.RentFrom<byte>(buffer.Slice((int)dataOffset, (int)dataCount));
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            byte setupCount = (byte)(Setup.Length / 2);
-            uint parameterCount = (ushort)TransParameters.Length;
-            uint dataCount = (ushort)TransData.Length;
+            var setupCount = (byte)(Setup.Length() / 2);
+            uint parameterCount = (ushort)TransParameters.Length();
+            uint dataCount = (ushort)TransData.Length();
 
             // WordCount + ByteCount are additional 3 bytes
-            uint parameterOffset = (ushort)(SMB1Header.Length + 3 + (FixedSMBParametersLength + Setup.Length));
-            int padding1 = (int)(4 - (parameterOffset % 4)) % 4;
+            uint parameterOffset = (ushort)(SMB1Header.Length + 3 + (FixedSMBParametersLength + Setup.Length()));
+            var padding1 = (int)(4 - (parameterOffset % 4)) % 4;
             parameterOffset += (ushort)padding1;
             uint dataOffset = (ushort)(parameterOffset + parameterCount);
-            int padding2 = (int)(4 - (dataOffset % 4)) % 4;
+            var padding2 = (int)(4 - (dataOffset % 4)) % 4;
             dataOffset += (ushort)padding2;
 
-            this.SMBParameters = new byte[FixedSMBParametersLength + Setup.Length];
-            int writeOffset = 0;
-            ByteWriter.WriteBytes(this.SMBParameters, ref writeOffset, Reserved1, 3);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref writeOffset, TotalParameterCount);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref writeOffset, TotalDataCount);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref writeOffset, parameterCount);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref writeOffset, parameterOffset);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref writeOffset, ParameterDisplacement);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref writeOffset, dataCount);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref writeOffset, dataOffset);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, ref writeOffset, DataDisplacement);
-            ByteWriter.WriteByte(this.SMBParameters, ref writeOffset, setupCount);
-            ByteWriter.WriteBytes(this.SMBParameters, ref writeOffset, Setup);
+            SmbParameters = Arrays.Rent(FixedSMBParametersLength + Setup.Length());
+            var writeOffset = 0;
+            BufferWriter.WriteBytes(SmbParameters.Memory.Span, ref writeOffset, Reserved1.Memory.Span, 3);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref writeOffset, TotalParameterCount);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref writeOffset, TotalDataCount);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref writeOffset, parameterCount);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref writeOffset, parameterOffset);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref writeOffset, ParameterDisplacement);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref writeOffset, dataCount);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref writeOffset, dataOffset);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, ref writeOffset, DataDisplacement);
+            BufferWriter.WriteByte(SmbParameters.Memory.Span, ref writeOffset, setupCount);
+            BufferWriter.WriteBytes(SmbParameters.Memory.Span, ref writeOffset, Setup.Memory.Span);
 
-            this.SMBData = new byte[parameterCount + dataCount + padding1 + padding2];
-            ByteWriter.WriteBytes(this.SMBData, padding1, TransParameters);
-            ByteWriter.WriteBytes(this.SMBData, (int)(padding1 + parameterCount + padding2), TransData);
+            SmbData = Arrays.Rent((int) (parameterCount + dataCount + padding1 + padding2));
+            BufferWriter.WriteBytes(SmbData.Memory.Span, padding1, TransParameters.Memory.Span);
+            BufferWriter.WriteBytes(SmbData.Memory.Span, (int)(padding1 + parameterCount + padding2), TransData.Memory.Span);
 
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_NT_TRANSACT;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_NT_TRANSACT;
 
         public static int CalculateMessageSize(int setupLength, int trans2ParametersLength, int trans2DataLength)
         {
-            int parameterOffset = SMB1Header.Length + 3 + (FixedSMBParametersLength + setupLength);
-            int padding1 = (4 - (parameterOffset % 4)) % 4;
+            var parameterOffset = SMB1Header.Length + 3 + (FixedSMBParametersLength + setupLength);
+            var padding1 = (4 - (parameterOffset % 4)) % 4;
             parameterOffset += padding1;
-            int dataOffset = (parameterOffset + trans2ParametersLength);
-            int padding2 = (4 - (dataOffset % 4)) % 4;
+            var dataOffset = (parameterOffset + trans2ParametersLength);
+            var padding2 = (4 - (dataOffset % 4)) % 4;
 
-            int messageParametersLength = FixedSMBParametersLength + setupLength;
-            int messageDataLength = trans2ParametersLength + trans2DataLength + padding1 + padding2;
+            var messageParametersLength = FixedSMBParametersLength + setupLength;
+            var messageDataLength = trans2ParametersLength + trans2DataLength + padding1 + padding2;
             // WordCount + ByteCount are additional 3 bytes
             return SMB1Header.Length + messageParametersLength + messageDataLength + 3;
+        }
+
+        public override void Dispose()
+        {
+            base.Dispose();
+            Reserved1.Dispose();
+            TransData.Dispose();
+            TransParameters.Dispose();
+            Reserved1 = TransData = TransParameters = null;
         }
     }
 }

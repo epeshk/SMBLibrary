@@ -4,11 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
-using System.IO;
 using SMBLibrary.SMB2;
-using Utilities;
 
 namespace SMBLibrary.Server
 {
@@ -29,14 +28,14 @@ namespace SMBLibrary.Server
         {
             for (ulong offset = 0; offset < UInt64.MaxValue; offset++)
             {
-                ulong sessionID = (ulong)(m_nextSessionID + offset);
+                var sessionID = m_nextSessionID + offset;
                 if (sessionID == 0 || sessionID == 0xFFFFFFFF)
                 {
                     continue;
                 }
                 if (!m_sessions.ContainsKey(sessionID))
                 {
-                    m_nextSessionID = (ulong)(sessionID + 1);
+                    m_nextSessionID = sessionID + 1;
                     return sessionID;
                 }
             }
@@ -45,7 +44,7 @@ namespace SMBLibrary.Server
 
         public SMB2Session CreateSession(ulong sessionID, string userName, string machineName, byte[] sessionKey, object accessToken, bool signingRequired)
         {
-            SMB2Session session = new SMB2Session(this, sessionID, userName, machineName, sessionKey, accessToken, signingRequired);
+            var session = new SMB2Session(this, sessionID, userName, machineName, sessionKey, accessToken, signingRequired);
             lock (m_sessions)
             {
                 m_sessions.Add(sessionID, session);
@@ -78,7 +77,7 @@ namespace SMBLibrary.Server
         {
             lock (m_sessions)
             {
-                foreach (SMB2Session session in m_sessions.Values)
+                foreach (var session in m_sessions.Values)
                 {
                     session.Close();
                 }
@@ -89,12 +88,12 @@ namespace SMBLibrary.Server
 
         public override List<SessionInformation> GetSessionsInformation()
         {
-            List<SessionInformation> result = new List<SessionInformation>();
+            var result = new List<SessionInformation>();
             lock (m_sessions)
             {
-                foreach (SMB2Session session in m_sessions.Values)
+                foreach (var session in m_sessions.Values)
                 {
-                    result.Add(new SessionInformation(this.ClientEndPoint, this.Dialect, session.UserName, session.MachineName, session.GetOpenFilesInformation(), session.CreationDT));
+                    result.Add(new SessionInformation(ClientEndPoint, Dialect, session.UserName, session.MachineName, session.GetOpenFilesInformation(), session.CreationDT));
                 }
             }
             return result;
@@ -104,14 +103,14 @@ namespace SMBLibrary.Server
         {
             for (ulong offset = 0; offset < UInt64.MaxValue; offset++)
             {
-                ulong asyncID = (ulong)(m_nextAsyncID + offset);
+                var asyncID = m_nextAsyncID + offset;
                 if (asyncID == 0 || asyncID == 0xFFFFFFFF)
                 {
                     continue;
                 }
                 if (!m_pendingRequests.ContainsKey(asyncID))
                 {
-                    m_nextAsyncID = (ulong)(asyncID + 1);
+                    m_nextAsyncID = asyncID + 1;
                     return asyncID;
                 }
             }
@@ -120,12 +119,12 @@ namespace SMBLibrary.Server
 
         public SMB2AsyncContext CreateAsyncContext(FileID fileID, SMB2ConnectionState connection, ulong sessionID, uint treeID)
         {
-            ulong? asyncID = AllocateAsyncID();
+            var asyncID = AllocateAsyncID();
             if (asyncID == null)
             {
                 return null;
             }
-            SMB2AsyncContext context = new SMB2AsyncContext();
+            var context = new SMB2AsyncContext();
             context.AsyncID = asyncID.Value;
             context.FileID = fileID;
             context.Connection = connection;

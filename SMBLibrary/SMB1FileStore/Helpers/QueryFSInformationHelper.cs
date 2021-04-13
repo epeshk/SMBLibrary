@@ -4,10 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using SMBLibrary.SMB1;
-using Utilities;
 
 namespace SMBLibrary.SMB1
 {
@@ -35,44 +33,45 @@ namespace SMBLibrary.SMB1
         {
             if (fsInfo is FileFsVolumeInformation)
             {
-                FileFsVolumeInformation volumeInfo = (FileFsVolumeInformation)fsInfo;
-                QueryFSVolumeInfo result = new QueryFSVolumeInfo();
+                var volumeInfo = (FileFsVolumeInformation)fsInfo;
+                var result = new QueryFSVolumeInfo();
                 result.VolumeCreationTime = volumeInfo.VolumeCreationTime;
                 result.SerialNumber = volumeInfo.VolumeSerialNumber;
                 result.VolumeLabel = volumeInfo.VolumeLabel;
                 return result;
             }
-            else if (fsInfo is FileFsSizeInformation)
+
+            if (fsInfo is FileFsSizeInformation)
             {
-                FileFsSizeInformation fsSizeInfo = (FileFsSizeInformation)fsInfo;
-                QueryFSSizeInfo result = new QueryFSSizeInfo();
+                var fsSizeInfo = (FileFsSizeInformation)fsInfo;
+                var result = new QueryFSSizeInfo();
                 result.TotalAllocationUnits = fsSizeInfo.TotalAllocationUnits;
                 result.TotalFreeAllocationUnits = fsSizeInfo.AvailableAllocationUnits;
                 result.BytesPerSector = fsSizeInfo.BytesPerSector;
                 result.SectorsPerAllocationUnit = fsSizeInfo.SectorsPerAllocationUnit;
                 return result;
             }
-            else if (fsInfo is FileFsDeviceInformation)
+
+            if (fsInfo is FileFsDeviceInformation)
             {
-                FileFsDeviceInformation fsDeviceInfo = (FileFsDeviceInformation)fsInfo;
-                QueryFSDeviceInfo result = new QueryFSDeviceInfo();
+                var fsDeviceInfo = (FileFsDeviceInformation)fsInfo;
+                var result = new QueryFSDeviceInfo();
                 result.DeviceType = fsDeviceInfo.DeviceType;
                 result.DeviceCharacteristics = fsDeviceInfo.Characteristics;
                 return result;
             }
-            else if (fsInfo is FileFsAttributeInformation)
+
+            if (fsInfo is FileFsAttributeInformation)
             {
-                FileFsAttributeInformation fsAttributeInfo = (FileFsAttributeInformation)fsInfo;
-                QueryFSAttibuteInfo result = new QueryFSAttibuteInfo();
+                var fsAttributeInfo = (FileFsAttributeInformation)fsInfo;
+                var result = new QueryFSAttibuteInfo();
                 result.FileSystemAttributes = fsAttributeInfo.FileSystemAttributes;
                 result.MaxFileNameLengthInBytes = fsAttributeInfo.MaximumComponentNameLength;
                 result.FileSystemName = fsAttributeInfo.FileSystemName;
                 return result;
             }
-            else
-            {
-                throw new NotImplementedException();
-            }
+
+            throw new NotImplementedException();
         }
     }
 }

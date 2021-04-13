@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -22,33 +23,40 @@ namespace SMBLibrary.SMB2
         public uint Reserved2;
         public FileID FileId;
 
-        public FlushRequest() : base(SMB2CommandName.Flush)
+        public FlushRequest()
         {
+            Init(SMB2CommandName.Flush);
             StructureSize = DeclaredSize;
         }
 
-        public FlushRequest(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            Reserved1 = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 2);
-            Reserved2 = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 4);
-            FileId = new FileID(buffer, offset + SMB2Header.Length + 8);
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            Reserved1 = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 2);
+            Reserved2 = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 4);
+            FileId = ObjectsPool<FileID>.Get().Init(buffer, offset + Smb2Header.Length + 8);
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 2, Reserved1);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 4, Reserved2);
-            FileId.WriteBytes(buffer, offset + 8);
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            LittleEndianWriter.WriteUInt16(buffer, 2, Reserved1);
+            LittleEndianWriter.WriteUInt32(buffer, 4, Reserved2);
+            FileId.WriteBytes(buffer, 8);
         }
 
-        public override int CommandLength
+        public override void Dispose()
         {
-            get
-            {
-                return DeclaredSize;
-            }
+            base.Dispose();
+            
+            //FileId.Dispose(); - fileId handle is frequently used for multiple requests and can be disposed via ISMBFileStore.CloseFile(...) method.  
+            FileId = default;
+
+            ObjectsPool<FlushRequest>.Return(this);
         }
+
+        public override int CommandLength => DeclaredSize;
     }
 }

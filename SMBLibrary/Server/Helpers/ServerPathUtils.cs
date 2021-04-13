@@ -4,10 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
-using Utilities;
 
 namespace SMBLibrary.Server
 {
@@ -19,15 +17,13 @@ namespace SMBLibrary.Server
         {
             if (path.StartsWith(@"\\"))
             {
-                int index = path.IndexOf('\\', 2);
+                var index = path.IndexOf('\\', 2);
                 if (index > 0)
                 {
                     return path.Substring(index);
                 }
-                else
-                {
-                    return String.Empty;
-                }
+
+                return String.Empty;
             }
             return path;
         }
@@ -36,27 +32,25 @@ namespace SMBLibrary.Server
         /// <returns>e.g. \*</returns>
         public static string GetRelativeSharePath(string path)
         {
-            string relativePath = GetRelativeServerPath(path);
-            int index = relativePath.IndexOf('\\', 1);
+            var relativePath = GetRelativeServerPath(path);
+            var index = relativePath.IndexOf('\\', 1);
             if (index > 0)
             {
                 return path.Substring(index);
             }
-            else
-            {
-                return @"\";
-            }
+
+            return @"\";
         }
 
         public static string GetShareName(string path)
         {
-            string relativePath = GetRelativeServerPath(path);
+            var relativePath = GetRelativeServerPath(path);
             if (relativePath.StartsWith(@"\"))
             {
                 relativePath = relativePath.Substring(1);
             }
 
-            int indexOfSeparator = relativePath.IndexOf(@"\");
+            var indexOfSeparator = relativePath.IndexOf(@"\");
             if (indexOfSeparator >= 0)
             {
                 relativePath = relativePath.Substring(0, indexOfSeparator);

@@ -4,9 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 using Utilities;
 
 namespace SMBLibrary.NetBios
@@ -41,9 +40,9 @@ namespace SMBLibrary.NetBios
             UnitID = new byte[6];
         }
 
-        public NodeStatistics(byte[] buffer, ref int offset)
+        public NodeStatistics(Span<byte> buffer, ref int offset)
         {
-            UnitID = ByteReader.ReadBytes(buffer, ref offset, 6);
+            UnitID = ByteReader.ReadBytes_RentArray(buffer, ref offset, 6);
             Jumpers = ByteReader.ReadByte(buffer, ref offset);
             TestResult = ByteReader.ReadByte(buffer, ref offset);
             VersionNumber = BigEndianReader.ReadUInt16(buffer, ref offset);
@@ -65,11 +64,11 @@ namespace SMBLibrary.NetBios
             SessionDataPacketSize = BigEndianReader.ReadUInt16(buffer, ref offset);
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
-            ByteWriter.WriteBytes(buffer, ref offset, UnitID, 6);
-            ByteWriter.WriteByte(buffer, ref offset, Jumpers);
-            ByteWriter.WriteByte(buffer, ref offset, TestResult);
+            BufferWriter.WriteBytes(buffer, ref offset, UnitID, 6);
+            BufferWriter.WriteByte(buffer, ref offset, Jumpers);
+            BufferWriter.WriteByte(buffer, ref offset, TestResult);
             BigEndianWriter.WriteUInt16(buffer, ref offset, VersionNumber);
             BigEndianWriter.WriteUInt16(buffer, ref offset, PeriodOfStatistics);
             BigEndianWriter.WriteUInt16(buffer, ref offset, NumberOfCRCs);
@@ -91,7 +90,7 @@ namespace SMBLibrary.NetBios
 
         public byte[] GetBytes()
         {
-            byte[] buffer = new byte[Length];
+            var buffer = new byte[Length];
             WriteBytes(buffer, 0);
             return buffer;
         }

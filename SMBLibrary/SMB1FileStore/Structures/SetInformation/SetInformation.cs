@@ -4,23 +4,22 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
-using Utilities;
+using System.Buffers;
 
 namespace SMBLibrary.SMB1
 {
     public abstract class SetInformation
     {
-        public abstract byte[] GetBytes();
+        public abstract IMemoryOwner<byte> GetBytes();
 
         public abstract SetInformationLevel InformationLevel
         {
             get;
         }
 
-        public static SetInformation GetSetInformation(byte[] buffer, SetInformationLevel informationLevel)
+        public static SetInformation GetSetInformation(Span<byte> buffer, SetInformationLevel informationLevel)
         {
             switch (informationLevel)
             {

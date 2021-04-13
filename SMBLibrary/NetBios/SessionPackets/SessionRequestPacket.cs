@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.NetBios
@@ -13,29 +15,31 @@ namespace SMBLibrary.NetBios
     /// <summary>
     /// [RFC 1002] 4.3.2. SESSION REQUEST PACKET
     /// </summary>
-    public class SessionRequestPacket : SessionPacket
+    public class SessionRequestPacket : SessionPacket<SessionRequestPacket>
     {
         public string CalledName;
         public string CallingName;
 
         public SessionRequestPacket()
         {
-            this.Type = SessionPacketTypeName.SessionRequest;
+            Type = SessionPacketTypeName.SessionRequest;
         }
 
-        public SessionRequestPacket(byte[] buffer, int offset) : base(buffer, offset)
+        public override void Init(Span<byte> buffer)
         {
-            CalledName = NetBiosUtils.DecodeName(this.Trailer, ref offset);
-            CallingName = NetBiosUtils.DecodeName(this.Trailer, ref offset);
+            var offset = 0;
+            base.Init(buffer);
+            CalledName = NetBiosUtils.DecodeName(Trailer.Memory.Span, ref offset);
+            CallingName = NetBiosUtils.DecodeName(Trailer.Memory.Span, ref offset);
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            byte[] part1 = NetBiosUtils.EncodeName(CalledName, String.Empty);
-            byte[] part2 = NetBiosUtils.EncodeName(CallingName, String.Empty);
-            this.Trailer = new byte[part1.Length + part2.Length];
-            ByteWriter.WriteBytes(this.Trailer, 0, part1);
-            ByteWriter.WriteBytes(this.Trailer, part1.Length, part2);
+            var part1 = NetBiosUtils.EncodeName(CalledName, string.Empty);
+            var part2 = NetBiosUtils.EncodeName(CallingName, string.Empty);
+            Trailer = Arrays.Rent(part1.Length + part2.Length);
+            BufferWriter.WriteBytes(Trailer.Memory.Span, 0, part1);
+            BufferWriter.WriteBytes(Trailer.Memory.Span, part1.Length, part2);
             return base.GetBytes();
         }
 
@@ -43,10 +47,16 @@ namespace SMBLibrary.NetBios
         {
             get
             {
-                byte[] part1 = NetBiosUtils.EncodeName(CalledName, String.Empty);
-                byte[] part2 = NetBiosUtils.EncodeName(CallingName, String.Empty);
+                var part1 = NetBiosUtils.EncodeName(CalledName, string.Empty);
+                var part2 = NetBiosUtils.EncodeName(CallingName, string.Empty);
                 return HeaderLength + part1.Length + part2.Length;
             }
+        }
+        
+        public override void Dispose()
+        {
+            base.Dispose();
+            ObjectsPool<SessionRequestPacket>.Return(this);
         }
     }
 }

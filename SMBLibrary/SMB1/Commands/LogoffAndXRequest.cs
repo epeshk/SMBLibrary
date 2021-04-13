@@ -4,10 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
-using Utilities;
+using System.Buffers;
+using MemoryPools.Memory;
 
 namespace SMBLibrary.SMB1
 {
@@ -18,26 +18,24 @@ namespace SMBLibrary.SMB1
     {
         public const int ParametersLength = 4;
 
-        public LogoffAndXRequest() : base()
+        public override SMB1Command Init()
         {
+            base.Init();
+            return this;
         }
 
-        public LogoffAndXRequest(byte[] buffer, int offset) : base(buffer, offset, false)
+        public SMB1Command Init(Span<byte> buffer, int offset)
         {
+            base.Init(buffer, offset, false);
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            this.SMBParameters = new byte[ParametersLength];
+            SmbParameters = Arrays.Rent(ParametersLength);
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_LOGOFF_ANDX;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_LOGOFF_ANDX;
     }
 }

@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -24,39 +25,39 @@ namespace SMBLibrary.SMB1
         public DateTime? CreationTime; // UTIME (seconds since Jan 1, 1970)
         public OpenMode OpenMode;
         public uint AllocationSize;
-        public byte[] Reserved; // 10 bytes
+        public IMemoryOwner<byte> Reserved; // 10 bytes
         public string FileName; // SMB_STRING
         // Data:
         public FullExtendedAttributeList ExtendedAttributeList;
 
-        public Transaction2Open2Request() : base()
+        public Transaction2Open2Request()
         {
-            Reserved = new byte[10];
+            Reserved = Arrays.Rent(10);
         }
 
-        public Transaction2Open2Request(byte[] parameters, byte[] data, bool isUnicode) : base()
+        public Transaction2Open2Request(IMemoryOwner<byte> parameters, IMemoryOwner<byte> data, bool isUnicode)
         {
             Flags = (Open2Flags)LittleEndianConverter.ToUInt16(parameters, 0);
-            AccessMode = new AccessModeOptions(parameters, 2);
+            AccessMode = new AccessModeOptions(parameters.Memory.Span, 2);
             Reserved1 = LittleEndianConverter.ToUInt16(parameters, 4);
             FileAttributes = (SMBFileAttributes)LittleEndianConverter.ToUInt16(parameters, 6);
             CreationTime = UTimeHelper.ReadNullableUTime(parameters, 8);
-            OpenMode = new OpenMode(parameters, 12);
+            OpenMode = new OpenMode(parameters.Memory.Span, 12);
             AllocationSize = LittleEndianConverter.ToUInt32(parameters, 14);
-            Reserved = ByteReader.ReadBytes(parameters, 18, 10);
+            Reserved = Arrays.RentFrom<byte>(parameters.Memory.Span.Slice(18, 10));
             FileName = SMB1Helper.ReadSMBString(parameters, 28, isUnicode);
 
-            ExtendedAttributeList = new FullExtendedAttributeList(data, 0);
+            ExtendedAttributeList = new FullExtendedAttributeList(data.Memory.Span, 0);
         }
 
-        public override byte[] GetSetup()
+        public override void GetSetupInto(Span<byte> target)
         {
-            return LittleEndianConverter.GetBytes((ushort)SubcommandName);
+            LittleEndianConverter.GetBytes(target, (ushort)SubcommandName);
         }
 
-        public override byte[] GetParameters(bool isUnicode)
+        public override IMemoryOwner<byte> GetParameters(bool isUnicode)
         {
-            int length = 28;
+            var length = 28;
             if (isUnicode)
             {
                 length += FileName.Length * 2 + 2;
@@ -66,30 +67,30 @@ namespace SMBLibrary.SMB1
                 length += FileName.Length + 1;
             }
 
-            byte[] parameters = new byte[length];
-            LittleEndianWriter.WriteUInt16(parameters, 0, (ushort)Flags);
-            AccessMode.WriteBytes(parameters, 2);
-            LittleEndianWriter.WriteUInt16(parameters, 4, Reserved1);
-            LittleEndianWriter.WriteUInt16(parameters, 6, (ushort)FileAttributes);
-            UTimeHelper.WriteUTime(parameters, 8, CreationTime);
-            OpenMode.WriteBytes(parameters, 12);
-            LittleEndianWriter.WriteUInt32(parameters, 14, AllocationSize);
-            ByteWriter.WriteBytes(parameters, 18, Reserved, 10);
-            SMB1Helper.WriteSMBString(parameters, 28, isUnicode, FileName);
+            var parameters = Arrays.Rent(length);
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 0, (ushort)Flags);
+            AccessMode.WriteBytes(parameters.Memory.Span, 2);
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 4, Reserved1);
+            LittleEndianWriter.WriteUInt16(parameters.Memory.Span, 6, (ushort)FileAttributes);
+            UTimeHelper.WriteUTime(parameters.Memory.Span, 8, CreationTime);
+            OpenMode.WriteBytes(parameters.Memory.Span, 12);
+            LittleEndianWriter.WriteUInt32(parameters.Memory.Span, 14, AllocationSize);
+            BufferWriter.WriteBytes(parameters.Memory.Span, 18, Reserved.Memory.Span, 10);
+            SMB1Helper.WriteSMBString(parameters.Memory.Span, 28, isUnicode, FileName);
             return parameters;
         }
 
-        public override byte[] GetData(bool isUnicode)
+        public override IMemoryOwner<byte> GetData(bool isUnicode)
         {
             return ExtendedAttributeList.GetBytes();
         }
 
-        public override Transaction2SubcommandName SubcommandName
+        public override Transaction2SubcommandName SubcommandName => Transaction2SubcommandName.TRANS2_OPEN2;
+
+        public override void Dispose()
         {
-            get
-            {
-                return Transaction2SubcommandName.TRANS2_OPEN2;
-            }
+            base.Dispose();
+            Reserved.Dispose();
         }
     }
 }

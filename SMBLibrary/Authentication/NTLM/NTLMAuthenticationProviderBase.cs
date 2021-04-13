@@ -4,17 +4,18 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using SMBLibrary.Authentication.GSSAPI;
 
 namespace SMBLibrary.Authentication.NTLM
 {
     public abstract class NTLMAuthenticationProviderBase : IGSSMechanism
     {
-        public static readonly byte[] NTLMSSPIdentifier = new byte[] { 0x2b, 0x06, 0x01, 0x04, 0x01, 0x82, 0x37, 0x02, 0x02, 0x0a };
+        public static readonly byte[] NTLMSSPIdentifier = { 0x2b, 0x06, 0x01, 0x04, 0x01, 0x82, 0x37, 0x02, 0x02, 0x0a };
 
-        public NTStatus AcceptSecurityContext(ref object context, byte[] inputToken, out byte[] outputToken)
+        public NTStatus AcceptSecurityContext(ref object context, Span<byte> inputToken, out IMemoryOwner<byte> outputToken)
         {
             outputToken = null;
             if (!AuthenticationMessageUtils.IsSignatureValid(inputToken))
@@ -22,7 +23,7 @@ namespace SMBLibrary.Authentication.NTLM
                 return NTStatus.SEC_E_INVALID_TOKEN;
             }
 
-            MessageTypeName messageType = AuthenticationMessageUtils.GetMessageType(inputToken);
+            var messageType = AuthenticationMessageUtils.GetMessageType(inputToken);
             if (messageType == MessageTypeName.Negotiate)
             {
                 NegotiateMessage negotiateMessage;
@@ -35,11 +36,12 @@ namespace SMBLibrary.Authentication.NTLM
                     return NTStatus.SEC_E_INVALID_TOKEN;
                 }
                 ChallengeMessage challengeMessage;
-                NTStatus status = GetChallengeMessage(out context, negotiateMessage, out challengeMessage);
+                var status = GetChallengeMessage(out context, negotiateMessage, out challengeMessage);
                 outputToken = challengeMessage.GetBytes();
                 return status;
             }
-            else if (messageType == MessageTypeName.Authenticate)
+
+            if (messageType == MessageTypeName.Authenticate)
             {
                 AuthenticateMessage authenticateMessage;
                 try
@@ -50,12 +52,11 @@ namespace SMBLibrary.Authentication.NTLM
                 {
                     return NTStatus.SEC_E_INVALID_TOKEN;
                 }
+
                 return Authenticate(context, authenticateMessage);
             }
-            else
-            {
-                return NTStatus.SEC_E_INVALID_TOKEN;
-            }
+
+            return NTStatus.SEC_E_INVALID_TOKEN;
         }
 
         public abstract NTStatus GetChallengeMessage(out object context, NegotiateMessage negotiateMessage, out ChallengeMessage challengeMessage);
@@ -66,12 +67,6 @@ namespace SMBLibrary.Authentication.NTLM
 
         public abstract object GetContextAttribute(object context, GSSAttributeName attributeName);
 
-        public byte[] Identifier
-        {
-            get
-            {
-                return NTLMSSPIdentifier;
-            }
-        }
+        public Span<byte> Identifier => NTLMSSPIdentifier;
     }
 }

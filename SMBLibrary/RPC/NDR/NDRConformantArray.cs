@@ -4,9 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
+
 using System.Collections.Generic;
-using System.Text;
 
 namespace SMBLibrary.RPC
 {
@@ -19,12 +18,12 @@ namespace SMBLibrary.RPC
         public void Read(NDRParser parser)
         {
             parser.BeginStructure();
-            uint maxCount = parser.ReadUInt32();
-            for (int index = 0; index < maxCount; index++)
+            var maxCount = parser.ReadUInt32();
+            for (var index = 0; index < maxCount; index++)
             {
-                T entry = new T();
+                var entry = new T();
                 entry.Read(parser);
-                this.Add(entry);
+                Add(entry);
             }
 
             parser.EndStructure();
@@ -33,9 +32,9 @@ namespace SMBLibrary.RPC
         public void Write(NDRWriter writer)
         {
             writer.BeginStructure();
-            uint maxCount = (uint)this.Count;
+            var maxCount = (uint)Count;
             writer.WriteUInt32(maxCount);
-            for (int index = 0; index < this.Count; index++)
+            for (var index = 0; index < Count; index++)
             {
                 this[index].Write(writer);
             }

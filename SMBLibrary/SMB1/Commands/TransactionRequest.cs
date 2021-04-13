@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -27,77 +28,90 @@ namespace SMBLibrary.SMB1
         public TransactionFlags Flags;
         public uint Timeout;
         public ushort Reserved2;
-        // ushort ParameterCount;
-        // ushort ParameterOffset;
-        // ushort DataCount;
-        // ushort DataOffset;
-        // byte SetupCount; // In 2-byte words
         public byte Reserved3;
-        public byte[] Setup;
+        public IMemoryOwner<byte> Setup;
         // Data:
         public string Name; // SMB_STRING (If Unicode, this field MUST be aligned to start on a 2-byte boundary from the start of the SMB header)
-        // Padding (alignment to 4 byte boundary)
-        public byte[] TransParameters; // Trans_Parameters
-        // Padding (alignment to 4 byte boundary)
-        public byte[] TransData; // Trans_Data
+        public IMemoryOwner<byte> TransParameters; // Trans_Parameters
+        public IMemoryOwner<byte> TransData; // Trans_Data
 
-        public TransactionRequest() : base()
+        public override SMB1Command Init()
         {
-            Name = String.Empty;
+            TotalParameterCount = default;
+            TotalDataCount = default;
+            MaxParameterCount = default;
+            MaxDataCount = default;
+            MaxSetupCount = default;
+            Reserved1 = default;
+            Flags = default;
+            Timeout = default;
+            Reserved2 = default;
+            Reserved3 = default;
+            Setup = default;
+            Name = string.Empty;
+            
+            TransParameters = MemoryOwner<byte>.Empty;
+            TransData = MemoryOwner<byte>.Empty;
+
+            return this;
         }
 
-        public TransactionRequest(byte[] buffer, int offset, bool isUnicode) : base(buffer, offset, isUnicode)
+        public override SMB1Command Init(Span<byte> buffer, int offset, bool isUnicode)
         {
-            TotalParameterCount = LittleEndianConverter.ToUInt16(this.SMBParameters, 0);
-            TotalDataCount = LittleEndianConverter.ToUInt16(this.SMBParameters, 2);
-            MaxParameterCount = LittleEndianConverter.ToUInt16(this.SMBParameters, 4);
-            MaxDataCount = LittleEndianConverter.ToUInt16(this.SMBParameters, 6);
-            MaxSetupCount = ByteReader.ReadByte(this.SMBParameters, 8);
-            Reserved1 = ByteReader.ReadByte(this.SMBParameters, 9);
-            Flags = (TransactionFlags)LittleEndianConverter.ToUInt16(this.SMBParameters, 10);
-            Timeout = LittleEndianConverter.ToUInt32(this.SMBParameters, 12);
-            Reserved2 = LittleEndianConverter.ToUInt16(this.SMBParameters, 16);
-            ushort transParameterCount = LittleEndianConverter.ToUInt16(this.SMBParameters, 18);
-            ushort transParameterOffset = LittleEndianConverter.ToUInt16(this.SMBParameters, 20);
-            ushort transDataCount = LittleEndianConverter.ToUInt16(this.SMBParameters, 22);
-            ushort transDataOffset = LittleEndianConverter.ToUInt16(this.SMBParameters, 24);
-            byte setupCount = ByteReader.ReadByte(this.SMBParameters, 26);
-            Reserved3 = ByteReader.ReadByte(this.SMBParameters, 27);
-            Setup = ByteReader.ReadBytes(this.SMBParameters, 28, setupCount * 2);
+            base.Init(buffer, offset, isUnicode);
+            
+            TotalParameterCount = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 0);
+            TotalDataCount = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 2);
+            MaxParameterCount = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 4);
+            MaxDataCount = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 6);
+            MaxSetupCount = ByteReader.ReadByte(SmbParameters.Memory.Span, 8);
+            Reserved1 = ByteReader.ReadByte(SmbParameters.Memory.Span, 9);
+            Flags = (TransactionFlags)LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 10);
+            Timeout = LittleEndianConverter.ToUInt32(SmbParameters.Memory.Span, 12);
+            Reserved2 = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 16);
+            var transParameterCount = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 18);
+            var transParameterOffset = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 20);
+            var transDataCount = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 22);
+            var transDataOffset = LittleEndianConverter.ToUInt16(SmbParameters.Memory.Span, 24);
+            var setupCount = ByteReader.ReadByte(SmbParameters.Memory.Span, 26);
+            Reserved3 = ByteReader.ReadByte(SmbParameters.Memory.Span, 27);
+            Setup = Arrays.RentFrom<byte>(SmbParameters.Memory.Span.Slice(28, setupCount * 2));
 
-            if (this.SMBData.Length > 0) // Workaround, Some SAMBA clients will set ByteCount to 0 (Popcorn Hour A-400)
+            if (SmbData.Length() > 0) // Workaround, Some SAMBA clients will set ByteCount to 0 (Popcorn Hour A-400)
             {
-                int dataOffset = 0;
+                var dataOffset = 0;
                 if (this is Transaction2Request)
                 {
                     Name = String.Empty;
-                    int nameLength = 1;
+                    var nameLength = 1;
                     dataOffset += nameLength;
                 }
                 else
                 {
                     if (isUnicode)
                     {
-                        int namePadding = 1;
+                        var namePadding = 1;
                         dataOffset += namePadding;
                     }
-                    Name = SMB1Helper.ReadSMBString(this.SMBData, ref dataOffset, isUnicode);
+                    Name = SMB1Helper.ReadSMBString(SmbData.Memory.Span, ref dataOffset, isUnicode);
                 }
             }
-            TransParameters = ByteReader.ReadBytes(buffer, transParameterOffset, transParameterCount);
-            TransData = ByteReader.ReadBytes(buffer, transDataOffset, transDataCount);
+            TransParameters = Arrays.RentFrom<byte>(buffer.Slice(transParameterOffset, transParameterCount));
+            TransData = Arrays.RentFrom<byte>(buffer.Slice(transDataOffset, transDataCount));
+
+            return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
+        public override IMemoryOwner<byte> GetBytes(bool isUnicode)
         {
-            if (Setup.Length % 2 > 0)
+            if (Setup.Length() % 2 > 0)
             {
                 throw new Exception("Setup length must be a multiple of 2");
             }
 
-            byte setupCount = (byte)(Setup.Length / 2);
-            ushort transParameterCount = (ushort)TransParameters.Length;
-            ushort transDataCount = (ushort)TransData.Length;
+            var setupCount = (byte)(Setup.Length() / 2);
+            var transParameterCount = (ushort)TransParameters.Length();
+            var transDataCount = (ushort)TransData.Length();
 
             // WordCount + ByteCount are additional 3 bytes
             int nameLength;
@@ -120,33 +134,33 @@ namespace SMBLibrary.SMB1
                     nameLength = Name.Length + 1;
                 }
             }
-            ushort transParameterOffset = (ushort)(SMB1Header.Length + 3 + (FixedSMBParametersLength + Setup.Length + namePadding + nameLength));
-            int padding1 = (4 - (transParameterOffset % 4)) % 4;
+            var transParameterOffset = (ushort)(SMB1Header.Length + 3 + (FixedSMBParametersLength + Setup.Length() + namePadding + nameLength));
+            var padding1 = (4 - (transParameterOffset % 4)) % 4;
             transParameterOffset += (ushort)padding1;
-            ushort transDataOffset = (ushort)(transParameterOffset + transParameterCount);
-            int padding2 = (4 - (transDataOffset % 4)) % 4;
+            var transDataOffset = (ushort)(transParameterOffset + transParameterCount);
+            var padding2 = (4 - (transDataOffset % 4)) % 4;
             transDataOffset += (ushort)padding2;
 
-            this.SMBParameters = new byte[FixedSMBParametersLength + Setup.Length];
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 0, TotalParameterCount);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 2, TotalDataCount);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 4, MaxParameterCount);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 6, MaxDataCount);
-            ByteWriter.WriteByte(this.SMBParameters, 8, MaxSetupCount);
-            ByteWriter.WriteByte(this.SMBParameters, 9, Reserved1);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 10, (ushort)Flags);
-            LittleEndianWriter.WriteUInt32(this.SMBParameters, 12, Timeout);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 16, Reserved2);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 18, transParameterCount);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 20, transParameterOffset);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 22, transDataCount);
-            LittleEndianWriter.WriteUInt16(this.SMBParameters, 24, transDataOffset);
-            ByteWriter.WriteByte(this.SMBParameters, 26, setupCount);
-            ByteWriter.WriteByte(this.SMBParameters, 27, Reserved3);
-            ByteWriter.WriteBytes(this.SMBParameters, 28, Setup);
+            SmbParameters = Arrays.Rent(FixedSMBParametersLength + Setup.Length());
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 0, TotalParameterCount);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 2, TotalDataCount);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 4, MaxParameterCount);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 6, MaxDataCount);
+            BufferWriter.WriteByte(SmbParameters.Memory.Span, 8, MaxSetupCount);
+            BufferWriter.WriteByte(SmbParameters.Memory.Span, 9, Reserved1);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 10, (ushort)Flags);
+            LittleEndianWriter.WriteUInt32(SmbParameters.Memory.Span, 12, Timeout);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 16, Reserved2);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 18, transParameterCount);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 20, transParameterOffset);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 22, transDataCount);
+            LittleEndianWriter.WriteUInt16(SmbParameters.Memory.Span, 24, transDataOffset);
+            BufferWriter.WriteByte(SmbParameters.Memory.Span, 26, setupCount);
+            BufferWriter.WriteByte(SmbParameters.Memory.Span, 27, Reserved3);
+            BufferWriter.WriteBytes(SmbParameters.Memory.Span, 28, Setup.Memory.Span);
 
             int offset;
-            this.SMBData = new byte[namePadding + nameLength + padding1 + transParameterCount + padding2 + transDataCount];
+            SmbData = Arrays.Rent(namePadding + nameLength + padding1 + transParameterCount + padding2 + transDataCount);
             offset = namePadding;
             if (this is Transaction2Request)
             {
@@ -154,20 +168,23 @@ namespace SMBLibrary.SMB1
             }
             else
             {
-                SMB1Helper.WriteSMBString(this.SMBData, ref offset, isUnicode, Name);
+                SMB1Helper.WriteSMBString(SmbData.Memory.Span, ref offset, isUnicode, Name);
             }
-            ByteWriter.WriteBytes(this.SMBData, offset + padding1, TransParameters);
-            ByteWriter.WriteBytes(this.SMBData, offset + padding1 + transParameterCount + padding2, TransData);
+            BufferWriter.WriteBytes(SmbData.Memory.Span, offset + padding1, TransParameters.Memory.Span);
+            BufferWriter.WriteBytes(SmbData.Memory.Span, offset + padding1 + transParameterCount + padding2, TransData.Memory.Span);
 
             return base.GetBytes(isUnicode);
         }
 
-        public override CommandName CommandName
+        public override CommandName CommandName => CommandName.SMB_COM_TRANSACTION;
+
+        public override void Dispose()
         {
-            get
-            {
-                return CommandName.SMB_COM_TRANSACTION;
-            }
+            base.Dispose();
+            Setup.Dispose();
+            TransData.Dispose();
+            TransParameters.Dispose();
+            Setup = TransData = TransParameters = null;
         }
     }
 }

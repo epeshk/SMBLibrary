@@ -4,10 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
 using System.Collections.Generic;
-using System.IO;
-using SMBLibrary.RPC;
 using SMBLibrary.Services;
 
 namespace SMBLibrary.Server
@@ -21,26 +20,14 @@ namespace SMBLibrary.Server
 
         public NamedPipeShare(List<string> shareList)
         {
-            List<RemoteService> services = new List<RemoteService>();
+            var services = new List<RemoteService>();
             services.Add(new ServerService(Environment.MachineName, shareList));
             services.Add(new WorkstationService(Environment.MachineName, Environment.MachineName));
             m_store = new NamedPipeStore(services);
         }
 
-        public string Name
-        {
-            get
-            {
-                return NamedPipeShareName;
-            }
-        }
+        public string Name => NamedPipeShareName;
 
-        public INTFileStore FileStore
-        {
-            get
-            {
-                return m_store;
-            }
-        }
+        public INTFileStore FileStore => m_store;
     }
 }

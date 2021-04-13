@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -28,83 +30,68 @@ namespace SMBLibrary.SMB2
         public uint AdditionalInformation;
         public uint Flags;
         public FileID FileId;
-        public byte[] InputBuffer = new byte[0];
+        public IMemoryOwner<byte> InputBuffer = MemoryOwner<byte>.Empty;
 
-        public QueryInfoRequest() : base(SMB2CommandName.QueryInfo)
+        public QueryInfoRequest()
         {
+            Init(SMB2CommandName.QueryInfo);
             StructureSize = DeclaredSize;
         }
 
-        public QueryInfoRequest(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            InfoType = (InfoType)ByteReader.ReadByte(buffer, offset + SMB2Header.Length + 2);
-            FileInfoClass = ByteReader.ReadByte(buffer, offset + SMB2Header.Length + 3);
-            OutputBufferLength = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 4);
-            InputBufferOffset = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 8);
-            Reserved = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 10);
-            InputBufferLength = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 12);
-            AdditionalInformation = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 16);
-            Flags = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 20);
-            FileId = new FileID(buffer, offset + SMB2Header.Length + 24);
-            InputBuffer = ByteReader.ReadBytes(buffer, offset + InputBufferOffset, (int)InputBufferLength);
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            InfoType = (InfoType)ByteReader.ReadByte(buffer, offset + Smb2Header.Length + 2);
+            FileInfoClass = ByteReader.ReadByte(buffer, offset + Smb2Header.Length + 3);
+            OutputBufferLength = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 4);
+            InputBufferOffset = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 8);
+            Reserved = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 10);
+            InputBufferLength = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 12);
+            AdditionalInformation = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 16);
+            Flags = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 20);
+            FileId = ObjectsPool<FileID>.Get().Init(buffer, offset + Smb2Header.Length + 24);
+            InputBuffer = Arrays.RentFrom<byte>(buffer.Slice(offset + InputBufferOffset, (int)InputBufferLength));
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
             InputBufferOffset = 0;
-            InputBufferLength = (uint)InputBuffer.Length;
-            if (InputBuffer.Length > 0)
+            InputBufferLength = (uint)InputBuffer.Length();
+            if (InputBuffer.Length() > 0)
             {
-                InputBufferOffset = SMB2Header.Length + FixedSize;
+                InputBufferOffset = Smb2Header.Length + FixedSize;
             }
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            ByteWriter.WriteByte(buffer, offset + 2, (byte)InfoType);
-            ByteWriter.WriteByte(buffer, offset + 3, FileInfoClass);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 4, OutputBufferLength);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 8, InputBufferOffset);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 10, Reserved);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 12, InputBufferLength);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 16, AdditionalInformation);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 20, Flags);
-            FileId.WriteBytes(buffer, offset + 24);
-            ByteWriter.WriteBytes(buffer, offset + FixedSize, InputBuffer);
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            BufferWriter.WriteByte(buffer, 2, (byte)InfoType);
+            BufferWriter.WriteByte(buffer, 3, FileInfoClass);
+            LittleEndianWriter.WriteUInt32(buffer, 4, OutputBufferLength);
+            LittleEndianWriter.WriteUInt16(buffer, 8, InputBufferOffset);
+            LittleEndianWriter.WriteUInt16(buffer, 10, Reserved);
+            LittleEndianWriter.WriteUInt32(buffer, 12, InputBufferLength);
+            LittleEndianWriter.WriteUInt32(buffer, 16, AdditionalInformation);
+            LittleEndianWriter.WriteUInt32(buffer, 20, Flags);
+            FileId.WriteBytes(buffer, 24);
+            BufferWriter.WriteBytes(buffer, FixedSize, InputBuffer.Memory.Span);
         }
 
         public FileInformationClass FileInformationClass
         {
-            get
-            {
-                return (FileInformationClass)FileInfoClass;
-            }
-            set
-            {
-                FileInfoClass = (byte)value;
-            }
+            get => (FileInformationClass)FileInfoClass;
+            set => FileInfoClass = (byte)value;
         }
 
         public FileSystemInformationClass FileSystemInformationClass
         {
-            get
-            {
-                return (FileSystemInformationClass)FileInfoClass;
-            }
-            set
-            {
-                FileInfoClass = (byte)value;
-            }
+            get => (FileSystemInformationClass)FileInfoClass;
+            set => FileInfoClass = (byte)value;
         }
 
         public SecurityInformation SecurityInformation
         {
-            get
-            {
-                return (SecurityInformation)AdditionalInformation;
-            }
-            set
-            {
-                AdditionalInformation = (uint)value;
-            }
+            get => (SecurityInformation)AdditionalInformation;
+            set => AdditionalInformation = (uint)value;
         }
 
         public void SetFileInformation(FileInformation fileInformation)
@@ -112,12 +99,17 @@ namespace SMBLibrary.SMB2
             InputBuffer = fileInformation.GetBytes();
         }
 
-        public override int CommandLength
+        public override void Dispose()
         {
-            get
-            {
-                return FixedSize + InputBuffer.Length;
-            }
+            base.Dispose();
+            InputBuffer.Dispose();
+
+            //FileId.Dispose(); - fileId handle is frequently used for multiple requests and can be disposed via ISMBFileStore.CloseFile(...) method.  
+            FileId = default;
+
+            ObjectsPool<QueryInfoRequest>.Return(this);
         }
+
+        public override int CommandLength => FixedSize + InputBuffer.Length();
     }
 }

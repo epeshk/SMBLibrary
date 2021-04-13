@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
+
+using System.Buffers;
+using MemoryPools.Memory;
 using SMBLibrary.SMB1;
 using Utilities;
 
@@ -15,9 +16,9 @@ namespace SMBLibrary.Server.SMB1
     {
         internal static void ProcessNTTransactNotifyChangeRequest(SMB1Header header, uint maxParameterCount, NTTransactNotifyChangeRequest subcommand, ISMBShare share, SMB1ConnectionState state)
         {
-            SMB1Session session = state.GetSession(header.UID);
-            OpenFileObject openFile = session.GetOpenFileObject(subcommand.FID);
-            SMB1AsyncContext context = state.CreateAsyncContext(header.UID, header.TID, header.PID, header.MID, subcommand.FID, state);
+            var session = state.GetSession(header.UID);
+            var openFile = session.GetOpenFileObject(subcommand.FID);
+            var context = state.CreateAsyncContext(header.UID, header.TID, header.PID, header.MID, subcommand.FID, state);
             // We wish to make sure that the 'Monitoring started' will appear before the 'Monitoring completed' in the log
             lock (context)
             {
@@ -35,23 +36,23 @@ namespace SMBLibrary.Server.SMB1
             }
         }
 
-        private static void OnNotifyChangeCompleted(NTStatus status, byte[] buffer, object context)
+        private static void OnNotifyChangeCompleted(NTStatus status, IMemoryOwner<byte> buffer, object context)
         {
-            SMB1AsyncContext asyncContext = (SMB1AsyncContext)context;
+            var asyncContext = (SMB1AsyncContext)context;
             // Wait until the 'Monitoring started' will be written to the log
             lock (asyncContext)
             {
-                SMB1ConnectionState connection = asyncContext.Connection;
+                var connection = asyncContext.Connection;
                 connection.RemoveAsyncContext(asyncContext);
-                SMB1Session session = connection.GetSession(asyncContext.UID);
+                var session = connection.GetSession(asyncContext.UID);
                 if (session != null)
                 {
-                    OpenFileObject openFile = session.GetOpenFileObject(asyncContext.FileID);
+                    var openFile = session.GetOpenFileObject(asyncContext.FileID);
                     if (openFile != null)
                     {
                         connection.LogToServer(Severity.Verbose, "NotifyChange: Monitoring of '{0}{1}' completed. NTStatus: {2}. PID: {3}. MID: {4}.", openFile.ShareName, openFile.Path, status, asyncContext.PID, asyncContext.MID);
                     }
-                    SMB1Header header = new SMB1Header();
+                    var header = new SMB1Header();
                     header.Command = CommandName.SMB_COM_NT_TRANSACT;
                     header.Status = status;
                     header.Flags = HeaderFlags.CaseInsensitive | HeaderFlags.CanonicalizedPaths | HeaderFlags.Reply;
@@ -66,15 +67,15 @@ namespace SMBLibrary.Server.SMB1
 
                     if (status == NTStatus.STATUS_SUCCESS)
                     {
-                        NTTransactNotifyChangeResponse notifyChangeResponse = new NTTransactNotifyChangeResponse();
+                        var notifyChangeResponse = new NTTransactNotifyChangeResponse();
                         notifyChangeResponse.FileNotifyInformationBytes = buffer;
-                        byte[] responseSetup = notifyChangeResponse.GetSetup();
-                        byte[] responseParameters = notifyChangeResponse.GetParameters(false);
-                        byte[] responseData = notifyChangeResponse.GetData();
-                        List<SMB1Command> responseList = NTTransactHelper.GetNTTransactResponse(responseSetup, responseParameters, responseData, asyncContext.Connection.MaxBufferSize);
+                        var responseSetup = notifyChangeResponse.GetSetup();
+                        var responseParameters = notifyChangeResponse.GetParameters(false);
+                        var responseData = notifyChangeResponse.GetData();
+                        var responseList = NTTransactHelper.GetNTTransactResponse(responseSetup, responseParameters, responseData, asyncContext.Connection.MaxBufferSize);
                         if (responseList.Count == 1)
                         {
-                            SMB1Message reply = new SMB1Message();
+                            var reply = new SMB1Message();
                             reply.Header = header;
                             reply.Commands.Add(responseList[0]);
                             SMBServer.EnqueueMessage(asyncContext.Connection, reply);
@@ -84,8 +85,8 @@ namespace SMBLibrary.Server.SMB1
                             // [MS-CIFS] In the event that the number of changes exceeds [..] the maximum size of the NT_Trans_Parameter block in
                             // the response [..] the NT Trans subsystem MUST return an error response with a Status value of STATUS_NOTIFY_ENUM_DIR.
                             header.Status = NTStatus.STATUS_NOTIFY_ENUM_DIR;
-                            ErrorResponse response = new ErrorResponse(CommandName.SMB_COM_NT_TRANSACT);
-                            SMB1Message reply = new SMB1Message();
+                            var response = ObjectsPool<ErrorResponse>.Get().Init(CommandName.SMB_COM_NT_TRANSACT);
+                            var reply = new SMB1Message();
                             reply.Header = header;
                             reply.Commands.Add(response);
                             SMBServer.EnqueueMessage(asyncContext.Connection, reply);
@@ -97,8 +98,8 @@ namespace SMBLibrary.Server.SMB1
                         //
                         // [MS-CIFS] In the event that the number of changes exceeds the size of the change notify buffer [..] 
                         // the NT Trans subsystem MUST return an error response with a Status value of STATUS_NOTIFY_ENUM_DIR.
-                        ErrorResponse response = new ErrorResponse(CommandName.SMB_COM_NT_TRANSACT);
-                        SMB1Message reply = new SMB1Message();
+                        var response = ObjectsPool<ErrorResponse>.Get().Init(CommandName.SMB_COM_NT_TRANSACT);
+                        var reply = new SMB1Message();
                         reply.Header = header;
                         reply.Commands.Add(response);
                         SMBServer.EnqueueMessage(asyncContext.Connection, reply);

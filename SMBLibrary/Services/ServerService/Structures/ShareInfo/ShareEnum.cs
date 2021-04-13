@@ -4,10 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
 using SMBLibrary.RPC;
-using Utilities;
 
 namespace SMBLibrary.Services
 {
@@ -47,17 +46,17 @@ namespace SMBLibrary.Services
             // 14.3.8 - For a non-encapsulated union, the discriminant is marshalled into the transmitted data stream twice.
             // once as the field or parameter, which is referenced by the switch_is construct, in the procedure argument list;
             // and once as the first part of the union representation.
-            uint level = parser.ReadUInt32();
+            var level = parser.ReadUInt32();
             switch (level)
             {
                 case 0:
                     ShareInfo0Container info0 = null;
-                    parser.ReadEmbeddedStructureFullPointer<ShareInfo0Container>(ref info0);
+                    parser.ReadEmbeddedStructureFullPointer(ref info0);
                     Info = info0;
                     break;
                 case 1:
                     ShareInfo1Container info1 = null;
-                    parser.ReadEmbeddedStructureFullPointer<ShareInfo1Container>(ref info1);
+                    parser.ReadEmbeddedStructureFullPointer(ref info1);
                     Info = info1;
                     break;
                 case 2:
@@ -65,8 +64,6 @@ namespace SMBLibrary.Services
                 case 502:
                 case 503:
                     throw new NotImplementedException();
-                default:
-                    break;
             }
             parser.EndStructure(); // SHARE_ENUM_UNION
             parser.EndStructure(); // SHARE_ENUM_STRUCT

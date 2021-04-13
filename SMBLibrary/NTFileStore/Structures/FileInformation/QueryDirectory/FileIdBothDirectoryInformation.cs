@@ -4,8 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary
@@ -28,39 +30,41 @@ namespace SMBLibrary
         public uint EaSize;
         private byte ShortNameLength;
         public byte Reserved1;
-        public string ShortName = String.Empty; // Short (8.3) file name in UTF16 (24 bytes)
+        public IMemoryOwner<char> ShortName = MemoryOwner<char>.Empty; // Short (8.3) file name in UTF16 (24 bytes)
         public ushort Reserved2;
         public ulong FileId;
-        public string FileName = String.Empty;
+        public IMemoryOwner<char> FileName = MemoryOwner<char>.Empty;
 
-        public FileIdBothDirectoryInformation()
+        public override QueryDirectoryFileInformation Init(Span<byte> buffer, int offset)
         {
-        }
-
-        public FileIdBothDirectoryInformation(byte[] buffer, int offset) : base(buffer, offset)
-        {
+            base.Init(buffer, offset);
             CreationTime = DateTime.FromFileTimeUtc(LittleEndianConverter.ToInt64(buffer, offset + 8));
             LastAccessTime = DateTime.FromFileTimeUtc(LittleEndianConverter.ToInt64(buffer, offset + 16));
             LastWriteTime = DateTime.FromFileTimeUtc(LittleEndianConverter.ToInt64(buffer, offset + 24));
             ChangeTime = DateTime.FromFileTimeUtc(LittleEndianConverter.ToInt64(buffer, offset + 32));
             EndOfFile = LittleEndianConverter.ToInt64(buffer, offset + 40);
             AllocationSize = LittleEndianConverter.ToInt64(buffer, offset + 48);
-            FileAttributes = (FileAttributes)LittleEndianConverter.ToUInt32(buffer, offset + 56);
+            FileAttributes = LittleEndianConverter.ToUInt32(buffer, offset + 56);
             FileNameLength = LittleEndianConverter.ToUInt32(buffer, offset + 60);
             EaSize = LittleEndianConverter.ToUInt32(buffer, offset + 64);
             ShortNameLength = ByteReader.ReadByte(buffer, offset + 68);
             Reserved1 = ByteReader.ReadByte(buffer, offset + 69);
-            ShortName = ByteReader.ReadUTF16String(buffer, offset + 70, ShortNameLength / 2);
+            ShortName = Arrays.Rent<char>(ShortNameLength / 2);
             Reserved2 = LittleEndianConverter.ToUInt16(buffer, offset + 94);
             FileId = LittleEndianConverter.ToUInt64(buffer, offset + 96);
-            FileName = ByteReader.ReadUTF16String(buffer, offset + 104, (int)FileNameLength / 2);
+            FileName = Arrays.Rent<char>((int)FileNameLength / 2); 
+            
+            ByteReader.ReadUTF16String(ShortName.Memory.Span, buffer, offset + 70, ShortNameLength / 2);
+            ByteReader.ReadUTF16String(FileName.Memory.Span, buffer, offset + 104, (int)FileNameLength / 2);
+            
+            return this;
         }
 
-        public override void WriteBytes(byte[] buffer, int offset)
+        public override void WriteBytes(Span<byte> buffer, int offset)
         {
             base.WriteBytes(buffer, offset);
-            ShortNameLength = (byte)(ShortName.Length * 2);
-            FileNameLength = (uint)(FileName.Length * 2);
+            ShortNameLength = (byte)(ShortName.Memory.Length * 2);
+            FileNameLength = (uint)(FileName.Memory.Length * 2);
             LittleEndianWriter.WriteInt64(buffer, offset + 8, CreationTime.ToFileTimeUtc());
             LittleEndianWriter.WriteInt64(buffer, offset + 16, LastAccessTime.ToFileTimeUtc());
             LittleEndianWriter.WriteInt64(buffer, offset + 24, LastWriteTime.ToFileTimeUtc());
@@ -70,28 +74,18 @@ namespace SMBLibrary
             LittleEndianWriter.WriteUInt32(buffer, offset + 56, (uint)FileAttributes);
             LittleEndianWriter.WriteUInt32(buffer, offset + 60, FileNameLength);
             LittleEndianWriter.WriteUInt32(buffer, offset + 64, EaSize);
-            ByteWriter.WriteByte(buffer, offset + 68, ShortNameLength);
-            ByteWriter.WriteByte(buffer, offset + 69, Reserved1);
-            ByteWriter.WriteUTF16String(buffer, offset + 70, ShortName);
+            BufferWriter.WriteByte(buffer, offset + 68, ShortNameLength);
+            BufferWriter.WriteByte(buffer, offset + 69, Reserved1);
+            BufferWriter.WriteUTF16String(buffer, offset + 70, ShortName.Memory.Span);
             LittleEndianWriter.WriteUInt16(buffer, offset + 94, Reserved2);
             LittleEndianWriter.WriteUInt64(buffer, offset + 96, FileId);
-            ByteWriter.WriteUTF16String(buffer, offset + 104, FileName);
+            BufferWriter.WriteUTF16String(buffer, offset + 104, FileName.Memory.Span);
         }
 
-        public override FileInformationClass FileInformationClass
-        {
-            get
-            {
-                return FileInformationClass.FileIdBothDirectoryInformation;
-            }
-        }
+        public override void Dispose() => ObjectsPool<FileIdBothDirectoryInformation>.Return(this);
 
-        public override int Length
-        {
-            get
-            {
-                return FixedLength + FileName.Length * 2;
-            }
-        }
+        public override FileInformationClass FileInformationClass => FileInformationClass.FileIdBothDirectoryInformation;
+
+        public override int Length => FixedLength + FileName.Memory.Length * 2;
     }
 }

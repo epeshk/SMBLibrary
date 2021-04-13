@@ -4,9 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace SMBLibrary.SMB1
 {
@@ -30,25 +29,25 @@ namespace SMBLibrary.SMB1
         public FileExistsOpts FileExistsOpts;
         public CreateFile CreateFile;
 
-        public OpenMode(byte[] buffer, int offset)
+        public OpenMode(Span<byte> buffer, int offset)
         {
             FileExistsOpts = (FileExistsOpts)(buffer[offset + 0] & 0x3);
             CreateFile = (CreateFile)((buffer[offset + 0] & 0x10) >> 4);
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
             buffer[offset + 0] = (byte)FileExistsOpts;
             buffer[offset + 0] |= (byte)((byte)CreateFile << 4);
         }
 
-        public void WriteBytes(byte[] buffer, ref int offset)
+        public void WriteBytes(Span<byte> buffer, ref int offset)
         {
             WriteBytes(buffer, offset);
             offset += Length;
         }
 
-        public static OpenMode Read(byte[] buffer, ref int offset)
+        public static OpenMode Read(Span<byte> buffer, ref int offset)
         {
             offset += Length;
             return new OpenMode(buffer, offset - Length);

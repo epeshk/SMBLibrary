@@ -1,39 +1,28 @@
-/* Copyright (C) 2017 Tal Aloni <tal.aloni.il@gmail.com>. All rights reserved.
- * 
- * You can redistribute this program and/or modify it under the terms of
- * the GNU Lesser Public License as published by the Free Software Foundation,
- * either version 3 of the License, or (at your option) any later version.
- */
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Threading.Tasks;
 
 namespace SMBLibrary.Client
 {
-    public interface ISMBClient
+    public interface ISmbClient : IAsyncDisposable
     {
-        bool Connect(IPAddress serverAddress, SMBTransportType transport);
+        ValueTask<bool> ConnectAsync(IPAddress serverAddress, SMBTransportType transport);
 
-        void Disconnect();
+        ValueTask DisconnectAsync();
 
-        NTStatus Login(string domainName, string userName, string password);
+        ValueTask<NTStatus> LoginAsync(string domainName, string userName, string password);
 
-        NTStatus Login(string domainName, string userName, string password, AuthenticationMethod authenticationMethod);
+        ValueTask<NTStatus> LoginAsync(string domainName, string userName, string password, AuthenticationMethod authenticationMethod);
 
-        NTStatus Logoff();
+        ValueTask<NTStatus> LogoffAsync();
 
-        List<string> ListShares(out NTStatus status);
+        ValueTask<NtResult<IEnumerable<string>>> ListSharesAsync();
 
-        ISMBFileStore TreeConnect(string shareName, out NTStatus status);
+        ValueTask<NtResult<ISMBFileStore>> TreeConnectAsync(string shareName);
 
-        uint MaxReadSize
-        {
-            get;
-        }
+        uint MaxReadSize { get; }
 
-        uint MaxWriteSize
-        {
-            get;
-        }
+        uint MaxWriteSize { get; }
     }
 }

@@ -4,32 +4,29 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.IO;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
 {
-    public abstract class Transaction2Subcommand
+    public abstract class Transaction2Subcommand : IDisposable
     {
-        public Transaction2Subcommand()
+        public virtual void GetSetupInto(Span<byte> target)
         {
         }
 
-        public virtual byte[] GetSetup()
+        public virtual IMemoryOwner<byte> GetParameters(bool isUnicode)
         {
-            return new byte[0];
+            return MemoryOwner<byte>.Empty;
         }
 
-        public virtual byte[] GetParameters(bool isUnicode)
+        public virtual IMemoryOwner<byte> GetData(bool isUnicode)
         {
-            return new byte[0];
-        }
-
-        public virtual byte[] GetData(bool isUnicode)
-        {
-            return new byte[0];
+            return MemoryOwner<byte>.Empty;
         }
 
         public abstract Transaction2SubcommandName SubcommandName
@@ -37,11 +34,11 @@ namespace SMBLibrary.SMB1
             get;
         }
 
-        public static Transaction2Subcommand GetSubcommandRequest(byte[] setup, byte[] parameters, byte[] data, bool isUnicode)
+        public static Transaction2Subcommand GetSubcommandRequest(IMemoryOwner<byte> setup, IMemoryOwner<byte> parameters, IMemoryOwner<byte> data, bool isUnicode)
         {
-            if (setup.Length == 2)
+            if (setup.Length() == 2)
             {
-                Transaction2SubcommandName subcommandName = (Transaction2SubcommandName)LittleEndianConverter.ToUInt16(setup, 0);
+                var subcommandName = (Transaction2SubcommandName)LittleEndianConverter.ToUInt16(setup.Memory.Span, 0);
                 switch (subcommandName)
                 {
                     case Transaction2SubcommandName.TRANS2_OPEN2:
@@ -69,6 +66,10 @@ namespace SMBLibrary.SMB1
                 }
             }
             throw new InvalidDataException();
+        }
+
+        public virtual void Dispose()
+        {
         }
     }
 }

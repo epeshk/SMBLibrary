@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -17,33 +18,28 @@ namespace SMBLibrary.SMB1
     public class QueryFileAltNameInfo : QueryInformation
     {
         //uint FileNameLength; // In bytes
-        public string FileName; // Unicode, 8.3 name of the file
+        public IMemoryOwner<char> FileName; // Unicode, 8.3 name of the file
 
         public QueryFileAltNameInfo()
         {
         }
 
-        public QueryFileAltNameInfo(byte[] buffer, int offset)
+        public QueryFileAltNameInfo(Span<byte> buffer, int offset)
         {
-            uint fileNameLength = LittleEndianReader.ReadUInt32(buffer, ref offset);
-            FileName = ByteReader.ReadUTF16String(buffer, ref offset, (int)(fileNameLength / 2));
+            var fileNameLength = LittleEndianReader.ReadUInt32(buffer, ref offset);
+            FileName = Arrays.Rent<char>((int)(fileNameLength / 2));
+            ByteReader.ReadUTF16String(FileName.Memory.Span, buffer, ref offset, (int)(fileNameLength / 2));
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            uint fileNameLength = (uint)(FileName.Length * 2);
-            byte[] buffer = new byte[4 + fileNameLength];
-            LittleEndianWriter.WriteUInt32(buffer, 0, fileNameLength);
-            ByteWriter.WriteUTF16String(buffer, 4, FileName);
+            var fileNameLength = (uint)(FileName.Memory.Length * 2);
+            var buffer = Arrays.Rent((int) (4 + fileNameLength));
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, 0, fileNameLength);
+            BufferWriter.WriteUTF16String(buffer.Memory.Span, 4, FileName.Memory.Span);
             return buffer;
         }
 
-        public override QueryInformationLevel InformationLevel
-        {
-            get
-            {
-                return QueryInformationLevel.SMB_QUERY_FILE_ALT_NAME_INFO;
-            }
-        }
+        public override QueryInformationLevel InformationLevel => QueryInformationLevel.SMB_QUERY_FILE_ALT_NAME_INFO;
     }
 }

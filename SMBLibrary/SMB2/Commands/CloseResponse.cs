@@ -4,8 +4,9 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB2
@@ -28,46 +29,49 @@ namespace SMBLibrary.SMB2
         public long EndofFile;
         public FileAttributes FileAttributes;
 
-        public CloseResponse() : base(SMB2CommandName.Close)
+        public CloseResponse()
         {
+            Init(SMB2CommandName.Close);
             Header.IsResponse = true;
             StructureSize = DeclaredSize;
         }
 
-        public CloseResponse(byte[] buffer, int offset) : base(buffer, offset)
+        public override SMB2Command Init(Span<byte> buffer, int offset)
         {
-            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 0);
-            Flags = (CloseFlags)LittleEndianConverter.ToUInt16(buffer, offset + SMB2Header.Length + 2);
-            Reserved = LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 4);
-            CreationTime = FileTimeHelper.ReadNullableFileTime(buffer, offset + SMB2Header.Length + 8);
-            LastAccessTime = FileTimeHelper.ReadNullableFileTime(buffer, offset + SMB2Header.Length + 16);
-            LastWriteTime = FileTimeHelper.ReadNullableFileTime(buffer, offset + SMB2Header.Length + 24);
-            ChangeTime = FileTimeHelper.ReadNullableFileTime(buffer, offset + SMB2Header.Length + 32);
-            AllocationSize = LittleEndianConverter.ToInt64(buffer, offset + SMB2Header.Length + 40);
-            EndofFile = LittleEndianConverter.ToInt64(buffer, offset + SMB2Header.Length + 48);
-            FileAttributes = (FileAttributes)LittleEndianConverter.ToUInt32(buffer, offset + SMB2Header.Length + 56);
+            base.Init(buffer, offset);
+            StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 0);
+            Flags = (CloseFlags)LittleEndianConverter.ToUInt16(buffer, offset + Smb2Header.Length + 2);
+            Reserved = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 4);
+            CreationTime = FileTimeHelper.ReadNullableFileTime(buffer, offset + Smb2Header.Length + 8);
+            LastAccessTime = FileTimeHelper.ReadNullableFileTime(buffer, offset + Smb2Header.Length + 16);
+            LastWriteTime = FileTimeHelper.ReadNullableFileTime(buffer, offset + Smb2Header.Length + 24);
+            ChangeTime = FileTimeHelper.ReadNullableFileTime(buffer, offset + Smb2Header.Length + 32);
+            AllocationSize = LittleEndianConverter.ToInt64(buffer, offset + Smb2Header.Length + 40);
+            EndofFile = LittleEndianConverter.ToInt64(buffer, offset + Smb2Header.Length + 48);
+            FileAttributes = LittleEndianConverter.ToUInt32(buffer, offset + Smb2Header.Length + 56);
+            return this;
         }
 
-        public override void WriteCommandBytes(byte[] buffer, int offset)
+        public override void WriteCommandBytes(Span<byte> buffer)
         {
-            LittleEndianWriter.WriteUInt16(buffer, offset + 0, StructureSize);
-            LittleEndianWriter.WriteUInt16(buffer, offset + 2, (ushort)Flags);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 4, Reserved);
-            FileTimeHelper.WriteFileTime(buffer, offset + 8, CreationTime);
-            FileTimeHelper.WriteFileTime(buffer, offset + 16, LastAccessTime);
-            FileTimeHelper.WriteFileTime(buffer, offset + 24, LastWriteTime);
-            FileTimeHelper.WriteFileTime(buffer, offset + 32, ChangeTime);
-            LittleEndianWriter.WriteInt64(buffer, offset + 40, AllocationSize);
-            LittleEndianWriter.WriteInt64(buffer, offset + 48, EndofFile);
-            LittleEndianWriter.WriteUInt32(buffer, offset + 56, (uint)FileAttributes);
+            LittleEndianWriter.WriteUInt16(buffer, 0, StructureSize);
+            LittleEndianWriter.WriteUInt16(buffer, 2, (ushort)Flags);
+            LittleEndianWriter.WriteUInt32(buffer, 4, Reserved);
+            FileTimeHelper.WriteFileTime(buffer, 8, CreationTime);
+            FileTimeHelper.WriteFileTime(buffer, 16, LastAccessTime);
+            FileTimeHelper.WriteFileTime(buffer, 24, LastWriteTime);
+            FileTimeHelper.WriteFileTime(buffer, 32, ChangeTime);
+            LittleEndianWriter.WriteInt64(buffer, 40, AllocationSize);
+            LittleEndianWriter.WriteInt64(buffer, 48, EndofFile);
+            LittleEndianWriter.WriteUInt32(buffer, 56, (uint)FileAttributes);
         }
 
-        public override int CommandLength
+        public override void Dispose()
         {
-            get
-            {
-                return DeclaredSize;
-            }
+            base.Dispose();
+            ObjectsPool<CloseResponse>.Return(this);
         }
+
+        public override int CommandLength => DeclaredSize;
     }
 }

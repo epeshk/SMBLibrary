@@ -4,17 +4,15 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text;
-using Utilities;
+using System.Buffers;
 
 namespace SMBLibrary.Services
 {
     public abstract class RemoteService
     {
-        public abstract byte[] GetResponseBytes(ushort opNum, byte[] requestBytes);
+        public abstract IMemoryOwner<byte> GetResponseBytes(ushort opNum, IMemoryOwner<byte> bytes);
 
         public abstract Guid InterfaceGuid
         {

@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.SMB1
@@ -23,11 +24,11 @@ namespace SMBLibrary.SMB1
         public bool WatchTree;
         public byte Reserved;
 
-        public NTTransactNotifyChangeRequest() : base()
+        public NTTransactNotifyChangeRequest()
         {
         }
 
-        public NTTransactNotifyChangeRequest(byte[] setup) : base()
+        public NTTransactNotifyChangeRequest(Span<byte> setup)
         {
             CompletionFilter = (NotifyChangeFilter)LittleEndianConverter.ToUInt32(setup, 0);
             FID = LittleEndianConverter.ToUInt16(setup, 4);
@@ -35,22 +36,16 @@ namespace SMBLibrary.SMB1
             Reserved = ByteReader.ReadByte(setup, 7);
         }
 
-        public override byte[] GetSetup()
+        public override IMemoryOwner<byte> GetSetup()
         {
-            byte[] setup = new byte[SetupLength];
+            var setup = Arrays.Rent(SetupLength);
             LittleEndianWriter.WriteUInt32(setup, 0, (uint)CompletionFilter);
             LittleEndianWriter.WriteUInt32(setup, 4, FID);
-            ByteWriter.WriteByte(setup, 6, Convert.ToByte(WatchTree));
-            ByteWriter.WriteByte(setup, 7, Reserved);
+            BufferWriter.WriteByte(setup, 6, Convert.ToByte(WatchTree));
+            BufferWriter.WriteByte(setup, 7, Reserved);
             return setup;
         }
 
-        public override NTTransactSubcommandName SubcommandName
-        {
-            get
-            {
-                return NTTransactSubcommandName.NT_TRANSACT_NOTIFY_CHANGE;
-            }
-        }
+        public override NTTransactSubcommandName SubcommandName => NTTransactSubcommandName.NT_TRANSACT_NOTIFY_CHANGE;
     }
 }

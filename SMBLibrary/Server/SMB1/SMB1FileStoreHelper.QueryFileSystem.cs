@@ -4,11 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using System.Text;
+
 using SMBLibrary.SMB1;
-using Utilities;
 
 namespace SMBLibrary.Server.SMB1
 {
@@ -28,7 +25,7 @@ namespace SMBLibrary.Server.SMB1
             }
 
             FileSystemInformation fsInfo;
-            NTStatus status = fileStore.GetFileSystemInformation(out fsInfo, informationClass);
+            var status = fileStore.GetFileSystemInformation(out fsInfo, informationClass);
             if (status != NTStatus.STATUS_SUCCESS)
             {
                 return status;

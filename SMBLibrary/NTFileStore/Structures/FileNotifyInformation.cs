@@ -4,8 +4,11 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary
@@ -35,41 +38,36 @@ namespace SMBLibrary
         public uint NextEntryOffset;
         public FileAction Action;
         private uint FileNameLength;
-        public string FileName;
+        public IMemoryOwner<char> FileName;
 
         public FileNotifyInformation()
         {
-            FileName = String.Empty;
+            FileName = MemoryOwner<char>.Empty;
         }
 
-        public FileNotifyInformation(byte[] buffer, int offset)
+        public FileNotifyInformation(Span<byte> buffer, int offset)
         {
             NextEntryOffset = LittleEndianConverter.ToUInt32(buffer, offset + 0);
             Action = (FileAction)LittleEndianConverter.ToUInt32(buffer, offset + 4);
             FileNameLength = LittleEndianConverter.ToUInt32(buffer, offset + 8);
-            FileName = ByteReader.ReadUTF16String(buffer, offset + 12, (int)(FileNameLength / 2));
+            FileName = Arrays.Rent<char>((int) (FileNameLength / 2)); 
+            ByteReader.ReadUTF16String(FileName.Memory.Span, buffer, offset + 12, (int)(FileNameLength / 2));
         }
 
-        public void WriteBytes(byte[] buffer, int offset)
+        public void WriteBytes(Span<byte> buffer, int offset)
         {
-            FileNameLength = (uint)(FileName.Length * 2);
+            FileNameLength = (uint)(FileName.Memory.Length * 2);
             LittleEndianWriter.WriteUInt32(buffer, offset + 0, NextEntryOffset);
             LittleEndianWriter.WriteUInt32(buffer, offset + 4, (uint)Action);
             LittleEndianWriter.WriteUInt32(buffer, offset + 8, FileNameLength);
-            ByteWriter.WriteUTF16String(buffer, offset + 12, FileName);
+            BufferWriter.WriteUTF16String(buffer, offset + 12, FileName.Memory.Span);
         }
 
-        public int Length
-        {
-            get
-            {
-                return FixedLength + FileName.Length * 2;
-            }
-        }
+        public int Length => FixedLength + FileName.Memory.Length * 2;
 
-        public static List<FileNotifyInformation> ReadList(byte[] buffer, int offset)
+        public static List<FileNotifyInformation> ReadList(Span<byte> buffer, int offset)
         {
-            List<FileNotifyInformation> result = new List<FileNotifyInformation>();
+            var result = new List<FileNotifyInformation>();
             FileNotifyInformation entry;
             do
             {
@@ -81,16 +79,16 @@ namespace SMBLibrary
             return result;
         }
 
-        public static byte[] GetBytes(List<FileNotifyInformation> notifyInformationList)
+        public static IMemoryOwner<byte> GetBytes(List<FileNotifyInformation> notifyInformationList)
         {
-            int listLength = GetListLength(notifyInformationList);
-            byte[] buffer = new byte[listLength];
-            int offset = 0;
-            for (int index = 0; index < notifyInformationList.Count; index++)
+            var listLength = GetListLength(notifyInformationList);
+            var buffer = Arrays.Rent<byte>(listLength);
+            var offset = 0;
+            for (var index = 0; index < notifyInformationList.Count; index++)
             {
-                FileNotifyInformation entry = notifyInformationList[index];
-                int length = entry.Length;
-                int paddedLength = (int)Math.Ceiling((double)length / 4) * 4;
+                var entry = notifyInformationList[index];
+                var length = entry.Length;
+                var paddedLength = (int)Math.Ceiling((double)length / 4) * 4;
                 if (index < notifyInformationList.Count - 1)
                 {
                     entry.NextEntryOffset = (uint)paddedLength;
@@ -99,7 +97,7 @@ namespace SMBLibrary
                 {
                     entry.NextEntryOffset = 0;
                 }
-                entry.WriteBytes(buffer, offset);
+                entry.WriteBytes(buffer.Memory.Span, offset);
                 offset += paddedLength;
             }
             return buffer;
@@ -107,17 +105,17 @@ namespace SMBLibrary
 
         public static int GetListLength(List<FileNotifyInformation> notifyInformationList)
         {
-            int result = 0;
-            for (int index = 0; index < notifyInformationList.Count; index++)
+            var result = 0;
+            for (var index = 0; index < notifyInformationList.Count; index++)
             {
-                FileNotifyInformation entry = notifyInformationList[index];
-                int length = entry.Length;
+                var entry = notifyInformationList[index];
+                var length = entry.Length;
                 // [MS-FSCC] NextEntryOffset MUST always be an integral multiple of 4.
                 // The FileName array MUST be padded to the next 4-byte boundary counted from the beginning of the structure.
                 if (index < notifyInformationList.Count - 1)
                 {
                     // No padding is required following the last data element.
-                    int paddedLength = (int)Math.Ceiling((double)length / 4) * 4;
+                    var paddedLength = (int)Math.Ceiling((double)length / 4) * 4;
                     result += paddedLength;
                 }
                 else

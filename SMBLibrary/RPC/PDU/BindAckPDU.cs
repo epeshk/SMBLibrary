@@ -4,9 +4,10 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Buffers;
+using MemoryPools.Memory;
 using Utilities;
 
 namespace SMBLibrary.RPC
@@ -24,45 +25,45 @@ namespace SMBLibrary.RPC
         public string SecondaryAddress; // sec_addr (port_any_t)
         // Padding (alignment to 4 byte boundary)
         public ResultList ResultList; // p_result_list
-        public byte[] AuthVerifier;
+        public IMemoryOwner<byte> AuthVerifier;
 
-        public BindAckPDU() : base()
+        public BindAckPDU()
         {
             PacketType = PacketTypeName.BindAck;
             SecondaryAddress = String.Empty;
             ResultList = new ResultList();
-            AuthVerifier = new byte[0];
+            AuthVerifier = MemoryOwner<byte>.Empty;
         }
 
-        public BindAckPDU(byte[] buffer, int offset) : base(buffer, offset)
+        public BindAckPDU(Span<byte> buffer, int offset) : base(buffer, offset)
         {
-            int startOffset = offset;
+            var startOffset = offset;
             offset += CommonFieldsLength;
             MaxTransmitFragmentSize = LittleEndianReader.ReadUInt16(buffer, ref offset);
             MaxReceiveFragmentSize = LittleEndianReader.ReadUInt16(buffer, ref offset);
             AssociationGroupID = LittleEndianReader.ReadUInt32(buffer, ref offset);
             SecondaryAddress = RPCHelper.ReadPortAddress(buffer, ref offset);
-            int padding = (4 - ((offset - startOffset) % 4)) % 4;
+            var padding = (4 - ((offset - startOffset) % 4)) % 4;
             offset += padding;
             ResultList = new ResultList(buffer, offset);
             offset += ResultList.Length;
-            AuthVerifier = ByteReader.ReadBytes(buffer, offset, AuthLength);
+            AuthVerifier = Arrays.RentFrom<byte>(buffer.Slice(offset, AuthLength));
         }
 
-        public override byte[] GetBytes()
+        public override IMemoryOwner<byte> GetBytes()
         {
-            AuthLength = (ushort)AuthVerifier.Length;
-            int padding = (4 - ((SecondaryAddress.Length + 3) % 4)) % 4;
-            byte[] buffer = new byte[Length];
-            WriteCommonFieldsBytes(buffer);
-            int offset = CommonFieldsLength;
-            LittleEndianWriter.WriteUInt16(buffer, ref offset, MaxTransmitFragmentSize);
-            LittleEndianWriter.WriteUInt16(buffer, ref offset, MaxReceiveFragmentSize);
-            LittleEndianWriter.WriteUInt32(buffer, ref offset, AssociationGroupID);
-            RPCHelper.WritePortAddress(buffer, ref offset, SecondaryAddress);
+            AuthLength = (ushort)AuthVerifier.Length();
+            var padding = (4 - ((SecondaryAddress.Length + 3) % 4)) % 4;
+            var buffer = Arrays.Rent<byte>(Length);
+            WriteCommonFieldsBytes(buffer.Memory.Span);
+            var offset = CommonFieldsLength;
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, ref offset, MaxTransmitFragmentSize);
+            LittleEndianWriter.WriteUInt16(buffer.Memory.Span, ref offset, MaxReceiveFragmentSize);
+            LittleEndianWriter.WriteUInt32(buffer.Memory.Span, ref offset, AssociationGroupID);
+            RPCHelper.WritePortAddress(buffer.Memory.Span, ref offset, SecondaryAddress);
             offset += padding;
-            ResultList.WriteBytes(buffer, ref offset);
-            ByteWriter.WriteBytes(buffer, offset, AuthVerifier);
+            ResultList.WriteBytes(buffer.Memory.Span, ref offset);
+            BufferWriter.WriteBytes(buffer.Memory.Span, offset, AuthVerifier.Memory.Span);
             
             return buffer;
         }
@@ -71,9 +72,16 @@ namespace SMBLibrary.RPC
         {
             get
             {
-                int padding = (4 - ((SecondaryAddress.Length + 3) % 4)) % 4;
+                var padding = (4 - ((SecondaryAddress.Length + 3) % 4)) % 4;
                 return CommonFieldsLength + BindAckFieldsFixedLength + SecondaryAddress.Length + 3 + padding + ResultList.Length + AuthLength;
             }
+        }
+
+        public override void Dispose()
+        {
+            base.Dispose();
+            AuthVerifier.Dispose();
+            AuthVerifier = null;
         }
     }
 }

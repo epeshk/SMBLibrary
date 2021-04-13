@@ -4,10 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
+
 using System;
-using System.Collections.Generic;
-using System.Text;
-using Utilities;
 
 namespace SMBLibrary.SMB1
 {
@@ -16,25 +14,20 @@ namespace SMBLibrary.SMB1
     /// </summary>
     public class CheckDirectoryResponse : SMB1Command
     {
-        public CheckDirectoryResponse() : base()
+        public override SMB1Command Init()
         {
+	        base.Init();
+
+	        return this;
         }
 
-        public CheckDirectoryResponse(byte[] buffer, int offset) : base(buffer, offset, false)
+        public CheckDirectoryResponse Init(Span<byte> buffer, int offset)
         {
+	        base.Init(buffer, offset, false);
+
+	        return this;
         }
 
-        public override byte[] GetBytes(bool isUnicode)
-        {
-            return base.GetBytes(isUnicode);
-        }
-        
-        public override CommandName CommandName
-        {
-            get
-            {
-                return CommandName.SMB_COM_CHECK_DIRECTORY;
-            }
-        }
+        public override CommandName CommandName => CommandName.SMB_COM_CHECK_DIRECTORY;
     }
 }
