@@ -6,22 +6,18 @@
  */
 using System;
 using System.Net.Sockets;
-#if NETSTANDARD2_0
 using System.Runtime.InteropServices;
-#endif
 
 namespace Utilities
 {
     public class SocketUtils
     {
-#if NETSTANDARD2_0
         private static bool IsDotNetFramework()
         {
             const string DotnetFrameworkDescription = ".NET Framework";
             string frameworkDescription = RuntimeInformation.FrameworkDescription;
             return frameworkDescription.StartsWith(DotnetFrameworkDescription);
         }
-#endif
 
         public static void SetKeepAlive(Socket socket, TimeSpan timeout)
         {
@@ -34,36 +30,20 @@ namespace Utilities
         public static void SetKeepAlive(Socket socket, bool enable, TimeSpan timeout, TimeSpan interval)
         {
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-#if NETSTANDARD2_0
-            if (IsDotNetFramework())
-            {
-#endif
-                // https://msdn.microsoft.com/en-us/library/dd877220.aspx
-                byte[] tcp_keepalive = new byte[12];
-                LittleEndianWriter.WriteUInt32(tcp_keepalive, 0, Convert.ToUInt32(enable));
-                LittleEndianWriter.WriteUInt32(tcp_keepalive, 4, (uint)timeout.TotalMilliseconds);
-                LittleEndianWriter.WriteUInt32(tcp_keepalive, 8, (uint)interval.TotalMilliseconds);
-                socket.IOControl(IOControlCode.KeepAliveValues, tcp_keepalive, null);
-#if NETSTANDARD2_0
-            }
-            else
-            {
-                // Note: We assume that we use .NET Core 3.0 or above
-                const SocketOptionName TcpKeepAliveTimeOptionName = (SocketOptionName)3;        // SocketOptionName.TcpKeepAliveTime in .NET Core 3.0
-                const SocketOptionName TcpKeepAliveIntervalOptionName = (SocketOptionName)17;   // SocketOptionName.TcpKeepAliveInterval in .NET Core 3.0
-                const SocketOptionName TcpKeepAliveRetryCountOptionName = (SocketOptionName)16; // SocketOptionName.TcpKeepAliveRetryCount in .NET Core 3.0
+            
+            const SocketOptionName TcpKeepAliveTimeOptionName = (SocketOptionName)3;        // SocketOptionName.TcpKeepAliveTime in .NET Core 3.0
+            const SocketOptionName TcpKeepAliveIntervalOptionName = (SocketOptionName)17;   // SocketOptionName.TcpKeepAliveInterval in .NET Core 3.0
+            const SocketOptionName TcpKeepAliveRetryCountOptionName = (SocketOptionName)16; // SocketOptionName.TcpKeepAliveRetryCount in .NET Core 3.0
 
-                socket.SetSocketOption(SocketOptionLevel.Tcp, TcpKeepAliveTimeOptionName, (int)timeout.TotalSeconds);
-                socket.SetSocketOption(SocketOptionLevel.Tcp, TcpKeepAliveIntervalOptionName, (int)interval.TotalSeconds);
-                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                {
-                    // Note: TcpKeepAliveRetryCount is only supported on Windows since Windows 10 version 1709
-                    // For uniformity, we make cross-platform use of the same value used in earlier Windows versions 
-                    const int RetryCount = 10;
-                    socket.SetSocketOption(SocketOptionLevel.Tcp, TcpKeepAliveRetryCountOptionName, RetryCount);
-                }
+            socket.SetSocketOption(SocketOptionLevel.Tcp, TcpKeepAliveTimeOptionName, (int)timeout.TotalSeconds);
+            socket.SetSocketOption(SocketOptionLevel.Tcp, TcpKeepAliveIntervalOptionName, (int)interval.TotalSeconds);
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // Note: TcpKeepAliveRetryCount is only supported on Windows since Windows 10 version 1709
+                // For uniformity, we make cross-platform use of the same value used in earlier Windows versions 
+                const int RetryCount = 10;
+                socket.SetSocketOption(SocketOptionLevel.Tcp, TcpKeepAliveRetryCountOptionName, RetryCount);
             }
-#endif
         }
 
         /// <summary>

@@ -5,14 +5,13 @@
  * either version 3 of the License, or (at your option) any later version.
  */
 using System;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Utilities;
 
 namespace SMBLibrary.Tests
 {
     public class AesCcmTests
     {
-        [TestMethod]
+        [Test]
         public void TestEncryption_Rfc3610_Packet_Vector1()
         {
             byte[] key = new byte[] { 0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF };
@@ -34,7 +33,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(expectedSignature, calculatedSignature));
         }
 
-        [TestMethod]
+        [Test]
         public void TestDecryption_Rfc3610_Packet_Vector1()
         {
             byte[] key = new byte[] { 0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF };
@@ -55,7 +54,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(expectedData, data));
         }
 
-        [TestMethod]
+        [Test]
         // Based on #1 test vector from https://docs.microsoft.com/en-us/archive/blogs/openspecification/encryption-in-smb-3-0-a-protocol-perspective
         public void TestEncryption()
         {
@@ -93,7 +92,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(expectedSignature, calculatedSignature));
         }
 
-        [TestMethod]
+        [Test]
         // Based on #2 test vector from https://docs.microsoft.com/en-us/archive/blogs/openspecification/encryption-in-smb-3-0-a-protocol-perspective
         public void TestDecryption()
         {

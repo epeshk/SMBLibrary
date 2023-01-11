@@ -7,16 +7,15 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SMBLibrary.Authentication.NTLM;
 using Utilities;
 
 namespace SMBLibrary.Tests
 {
-    [TestClass]
+    [TestFixture]
     public class NTLMSigningTests
     {
-        [TestMethod]
+        [Test]
         public void TestLMMIC()
         {
             string password = "Password";
@@ -57,7 +56,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(mic, expected));
         }
 
-        [TestMethod]
+        [Test]
         public void TestNTLMv1MIC()
         {
             string password = "Password";
@@ -98,7 +97,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(mic, expected));
         }
 
-        [TestMethod]
+        [Test]
         public void TestNTLMv1ExtendedSessionSecurityKeyExchangeMIC()
         {
             string password = "Password";
@@ -145,7 +144,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(mic, expected));
         }
 
-        [TestMethod]
+        [Test]
         public void TestNTLMv2KeyExchangeMIC()
         {
             byte[] responseKeyNT = NTLMCryptography.NTOWFv2("Password", "User", "TAL-VM6");

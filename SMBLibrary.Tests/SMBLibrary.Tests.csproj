@@ -1,26 +1,23 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFrameworks>net40</TargetFrameworks>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <AssemblyName>SMBLibrary.Tests</AssemblyName>
-    <RootNamespace>SMBLibrary.Tests</RootNamespace>
-    <OutputType>Exe</OutputType>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net7.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\SMBLibrary.Win32\SMBLibrary.Win32.csproj" />
-    <ProjectReference Include="..\SMBLibrary\SMBLibrary.csproj" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.1.0" />
+        <PackageReference Include="NUnit" Version="3.13.3" />
+        <PackageReference Include="NUnit3TestAdapter" Version="4.2.1" />
+        <PackageReference Include="NUnit.Analyzers" Version="3.3.0" />
+        <PackageReference Include="coverlet.collector" Version="3.1.2" />
+        <PackageReference Include="System.Text.Encoding.CodePages" Version="7.0.0" />
+    </ItemGroup>
 
-  <ItemGroup Condition="'$(Configuration)' != 'Release'">
-    <ProjectReference Include="..\Utilities\Utilities.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="Microsoft.VisualStudio.QualityTools.UnitTestFramework">
-      <HintPath>Components\Microsoft.VisualStudio.QualityTools.UnitTestFramework.dll</HintPath>
-    </Reference>
-  </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\SMBLibrary\SMBLibrary.csproj" />
+    </ItemGroup>
 
 </Project>

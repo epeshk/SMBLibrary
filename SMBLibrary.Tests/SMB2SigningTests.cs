@@ -7,16 +7,15 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SMBLibrary.SMB2;
 using Utilities;
 
 namespace SMBLibrary.Tests
 {
-    [TestClass]
+    [TestFixture]
     public class SMB2SigningTests
     {
-        [TestMethod]
+        [Test]
         public void TestSMB202SignatureCalculation()
         {
             byte[] exportedSessionKey = new byte[] { 0xD3, 0x83, 0x54, 0xCC, 0x37, 0x43, 0x39, 0xF0, 0x52, 0x4F, 0x78, 0x91, 0x46, 0x78, 0x99, 0x21 };
@@ -35,7 +34,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(signature, expected));
         }
 
-        [TestMethod]
+        [Test]
         public void TestSMB210SignatureCalculation()
         {
             byte[] exportedSessionKey = new byte[] { 0x04, 0xE7, 0x07, 0x57, 0x1F, 0x8E, 0x03, 0x53, 0xB7, 0x7A, 0x94, 0xC3, 0x65, 0x3B, 0x87, 0xB5 };
@@ -54,7 +53,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(signature, expected));
         }
 
-        [TestMethod]
+        [Test]
         public void TestSMB300SignatureCalculation()
         {
             byte[] exportedSessionKey = new byte[] { 0x35, 0x40, 0x24, 0xCB, 0xCA, 0x4F, 0x94, 0xAA, 0x51, 0xD4, 0x03, 0x3E, 0x6E, 0x9B, 0x2F, 0x98 };
