@@ -1,34 +1,42 @@
 /* Copyright (C) 2014-2020 Tal Aloni <tal.aloni.il@gmail.com>. All rights reserved.
+ * Copyright (C) 2023 Eugene Peshkov and SMBLibrary.Async contributors. All rights reserved.
  * 
  * You can redistribute this program and/or modify it under the terms of
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using SMBLibrary.SMB2;
 using Utilities;
 
 namespace SMBLibrary.NetBios
 {
-    public class NBTConnectionReceiveBuffer
+    internal class NBTConnectionReceiveBuffer
     {
+        private readonly ArrayPool<byte> pool;
+        private readonly ITrailerDecryptor decryptor;
         private byte[] m_buffer;
         private int m_readOffset = 0;
         private int m_bytesInBuffer = 0;
         private int? m_packetLength;
 
-        public NBTConnectionReceiveBuffer() : this(SessionPacket.MaxSessionPacketLength)
+        public NBTConnectionReceiveBuffer(ArrayPool<byte> pool, ITrailerDecryptor decryptor) : this(SessionPacket.MaxSessionPacketLength, pool, decryptor)
         {
         }
 
         /// <param name="bufferLength">Must be large enough to hold the largest possible NBT packet</param>
-        public NBTConnectionReceiveBuffer(int bufferLength)
+        public NBTConnectionReceiveBuffer(int bufferLength, ArrayPool<byte> pool, ITrailerDecryptor decryptor)
         {
             if (bufferLength < SessionPacket.MaxSessionPacketLength)
             {
                 throw new ArgumentException("bufferLength must be large enough to hold the largest possible NBT packet");
             }
+
+            this.pool = pool;
+            this.decryptor = decryptor;
             m_buffer = new byte[bufferLength];
         }
 
@@ -70,7 +78,7 @@ namespace SMBLibrary.NetBios
             SessionPacket packet;
             try
             {
-                packet = SessionPacket.GetSessionPacket(m_buffer, m_readOffset);
+                packet = SessionPacket.GetSessionPacket(m_buffer, m_readOffset, pool, decryptor);
             }
             catch (IndexOutOfRangeException ex)
             {

@@ -478,3 +478,13 @@ Revision History:
         Client: Fixed bug when trying to use local ip address as host name.
         Client: Provide SPN with NTLMv2 token.
         NTFileSystemAdapter: Avoid modifications of entries returned from IFileSystem.
+
+SMBLibrary.Async
+----------------
+
+0.0.1 - Server code removed
+        SMB 1 support removed
+        All SMB2Client operations are asynchronous
+        Read/Write operations allocate less memory
+        Other small memory traffic optimizations
+        Improved signing and encryption performance

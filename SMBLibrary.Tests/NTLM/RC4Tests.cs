@@ -4,10 +4,8 @@
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
+
 using System.Security.Cryptography;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Utilities;
 
 namespace SMBLibrary.Tests
@@ -16,10 +14,10 @@ namespace SMBLibrary.Tests
     /// https://tools.ietf.org/id/draft-kaukonen-cipher-arcfour-03.txt
     /// Test Vectors from Appendix A
     /// </summary>
-    [TestClass]
+    [TestFixture]
     public class RC4Tests
     {
-        [TestMethod]
+        [Test]
         public void Test1()
         {
             byte[] key = new byte[] { 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF };
@@ -29,7 +27,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(cipher, expectedCipher));
         }
 
-        [TestMethod]
+        [Test]
         public void Test2()
         {
             byte[] key = new byte[] { 0x61, 0x8A, 0x63, 0xD2, 0xFB };
@@ -39,7 +37,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(cipher, expectedCipher));
         }
 
-        [TestMethod]
+        [Test]
         public void Test3()
         {
             byte[] key = new byte[] { 0x29, 0x04, 0x19, 0x72, 0xFB, 0x42, 0xBA, 0x5F,

@@ -1,12 +1,15 @@
 /* Copyright (C) 2014-2020 Tal Aloni <tal.aloni.il@gmail.com>. All rights reserved.
+ * Copyright (C) 2023 Eugene Peshkov and SMBLibrary.Async contributors. All rights reserved.
  * 
  * You can redistribute this program and/or modify it under the terms of
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.IO;
+using System.Linq;
+using SMBLibrary.SMB2;
 using Utilities;
 
 namespace SMBLibrary.NetBios
@@ -26,32 +29,75 @@ namespace SMBLibrary.NetBios
 
         public SessionPacketTypeName Type;
         private int TrailerLength; // Session packet: 17 bits, Direct TCP transport packet: 3 bytes
-        public byte[] Trailer;
+        public ArraySegment<byte>[] Trailer;
+
+        public byte[] TrailerBytes
+        {
+            get
+            {
+                if (Trailer == null || Trailer.Length == 0) return null;
+                if (Trailer.Length > 1)
+                    throw new Exception();
+                return Trailer[0].Array;
+            }
+            set
+            {
+                if (Trailer != null && Trailer.Length > 1)
+                    throw new Exception();
+                Trailer = new ArraySegment<byte>[] { value };
+            }
+        }
 
         public SessionPacket()
         {
         }
 
-        public SessionPacket(byte[] buffer, int offset)
+        internal SessionPacket(byte[] buffer, int offset, ArrayPool<byte> pool, ITrailerDecryptor decryptor=null)
         {
             Type = (SessionPacketTypeName)ByteReader.ReadByte(buffer, offset + 0);
             TrailerLength = ByteReader.ReadByte(buffer, offset + 1) << 16 | BigEndianConverter.ToUInt16(buffer, offset + 2);
-            Trailer = ByteReader.ReadBytes(buffer, offset + 4, TrailerLength);
+
+            var trailer = buffer.AsSpan(offset + 4, TrailerLength);
+            if (decryptor != null)
+                trailer = decryptor.DecryptTrailer(trailer);
+
+            SMB2CommandName commandName = (SMB2CommandName)LittleEndianConverter.ToUInt16(trailer, 12);
+            var structureSize = LittleEndianConverter.ToUInt16(trailer, SMB2Header.Length + 0);
+            
+            if (commandName == SMB2CommandName.Read && structureSize == ReadResponse.DeclaredSize)
+            {
+                var dataOffset = ByteReader.ReadByte(trailer, SMB2Header.Length + 2);
+                var dataLength = (int)LittleEndianConverter.ToUInt32(trailer, SMB2Header.Length + 4);
+                var beginningArray = pool.Rent(dataOffset);
+                var array = pool.Rent(dataLength);
+
+                trailer.Slice(0, dataOffset).CopyTo(beginningArray);
+                trailer.Slice(dataOffset, dataLength).CopyTo(array);
+
+                Trailer = new ArraySegment<byte>[]
+                {
+                    trailer.Slice(0, dataOffset).ToArray(),
+                    array
+                };
+            }
+            else
+            {
+                Trailer = new ArraySegment<byte>[] { trailer.ToArray() };
+            }
         }
 
-        public virtual byte[] GetBytes()
+        public virtual ArraySegment<byte>[] GetBytes()
         {
-            TrailerLength = this.Trailer.Length;
+            TrailerLength = this.Trailer.Sum(x => x.Count);
 
             byte flags = Convert.ToByte(TrailerLength >> 16);
 
-            byte[] buffer = new byte[HeaderLength + Trailer.Length];
+            byte[] buffer = new byte[HeaderLength];
             ByteWriter.WriteByte(buffer, 0, (byte)Type);
             ByteWriter.WriteByte(buffer, 1, flags);
             BigEndianWriter.WriteUInt16(buffer, 2, (ushort)(TrailerLength & 0xFFFF));
-            ByteWriter.WriteBytes(buffer, 4, Trailer);
 
-            return buffer;
+            return Trailer.Prepend(buffer).ToArray();
         }
 
         public virtual int Length
@@ -68,23 +114,23 @@ namespace SMBLibrary.NetBios
             return 4 + trailerLength;
         }
 
-        public static SessionPacket GetSessionPacket(byte[] buffer, int offset)
+        internal static SessionPacket GetSessionPacket(byte[] buffer, int offset, ArrayPool<byte> pool, ITrailerDecryptor decryptor)
         {
             SessionPacketTypeName type = (SessionPacketTypeName)ByteReader.ReadByte(buffer, offset);
             switch (type)
             {
                 case SessionPacketTypeName.SessionMessage:
-                    return new SessionMessagePacket(buffer, offset);
+                    return new SessionMessagePacket(buffer, offset, pool, decryptor);
                 case SessionPacketTypeName.SessionRequest:
-                    return new SessionRequestPacket(buffer, offset);
+                    return new SessionRequestPacket(buffer, offset, pool);
                 case SessionPacketTypeName.PositiveSessionResponse:
-                    return new PositiveSessionResponsePacket(buffer, offset);
+                    return new PositiveSessionResponsePacket(buffer, offset, pool);
                 case SessionPacketTypeName.NegativeSessionResponse:
-                    return new NegativeSessionResponsePacket(buffer, offset);
+                    return new NegativeSessionResponsePacket(buffer, offset, pool);
                 case SessionPacketTypeName.RetargetSessionResponse:
-                    return new SessionRetargetResponsePacket(buffer, offset);
+                    return new SessionRetargetResponsePacket(buffer, offset, pool);
                 case SessionPacketTypeName.SessionKeepAlive:
-                    return new SessionKeepAlivePacket(buffer, offset);
+                    return new SessionKeepAlivePacket(buffer, offset, pool);
                 default:
                     throw new InvalidDataException("Invalid NetBIOS session packet type: 0x" + ((byte)type).ToString("X2"));
             }

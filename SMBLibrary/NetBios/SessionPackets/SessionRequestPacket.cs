@@ -1,11 +1,12 @@
 /* Copyright (C) 2014-2017 Tal Aloni <tal.aloni.il@gmail.com>. All rights reserved.
+ * Copyright (C) 2023 Eugene Peshkov and SMBLibrary.Async contributors. All rights reserved.
  * 
  * You can redistribute this program and/or modify it under the terms of
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using Utilities;
 
 namespace SMBLibrary.NetBios
@@ -23,19 +24,19 @@ namespace SMBLibrary.NetBios
             this.Type = SessionPacketTypeName.SessionRequest;
         }
 
-        public SessionRequestPacket(byte[] buffer, int offset) : base(buffer, offset)
+        public SessionRequestPacket(byte[] buffer, int offset, ArrayPool<byte> pool) : base(buffer, offset, pool)
         {
-            CalledName = NetBiosUtils.DecodeName(this.Trailer, ref offset);
-            CallingName = NetBiosUtils.DecodeName(this.Trailer, ref offset);
+            CalledName = NetBiosUtils.DecodeName(this.TrailerBytes, ref offset);
+            CallingName = NetBiosUtils.DecodeName(this.TrailerBytes, ref offset);
         }
 
-        public override byte[] GetBytes()
+        public override ArraySegment<byte>[] GetBytes()
         {
             byte[] part1 = NetBiosUtils.EncodeName(CalledName, String.Empty);
             byte[] part2 = NetBiosUtils.EncodeName(CallingName, String.Empty);
-            this.Trailer = new byte[part1.Length + part2.Length];
-            ByteWriter.WriteBytes(this.Trailer, 0, part1);
-            ByteWriter.WriteBytes(this.Trailer, part1.Length, part2);
+            this.TrailerBytes = new byte[part1.Length + part2.Length];
+            ByteWriter.WriteBytes(this.TrailerBytes, 0, part1);
+            ByteWriter.WriteBytes(this.TrailerBytes, part1.Length, part2);
             return base.GetBytes();
         }
 

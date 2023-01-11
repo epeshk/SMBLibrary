@@ -1,4 +1,5 @@
 /* Copyright (C) 2014-2017 Tal Aloni <tal.aloni.il@gmail.com>. All rights reserved.
+ * Copyright (C) 2023 Eugene Peshkov and SMBLibrary.Async contributors. All rights reserved.
  * 
  * You can redistribute this program and/or modify it under the terms of
  * the GNU Lesser Public License as published by the Free Software Foundation,
@@ -27,22 +28,10 @@ namespace SMBLibrary
             }
         }
 
-        public static DateTime ReadFileTime(byte[] buffer, ref int offset)
-        {
-            offset += 8;
-            return ReadFileTime(buffer, offset - 8);
-        }
-
         public static void WriteFileTime(byte[] buffer, int offset, DateTime time)
         {
             long span = time.ToFileTimeUtc();
             LittleEndianWriter.WriteInt64(buffer, offset, span);
-        }
-
-        public static void WriteFileTime(byte[] buffer, ref int offset, DateTime time)
-        {
-            WriteFileTime(buffer, offset, time);
-            offset += 8;
         }
 
         public static DateTime? ReadNullableFileTime(byte[] buffer, int offset)
@@ -62,12 +51,6 @@ namespace SMBLibrary
             }
         }
 
-        public static DateTime? ReadNullableFileTime(byte[] buffer, ref int offset)
-        {
-            offset += 8;
-            return ReadNullableFileTime(buffer, offset - 8);
-        }
-
         public static void WriteFileTime(byte[] buffer, int offset, DateTime? time)
         {
             long span = 0;
@@ -76,12 +59,6 @@ namespace SMBLibrary
                 span = time.Value.ToFileTimeUtc();
             }
             LittleEndianWriter.WriteInt64(buffer, offset, span);
-        }
-
-        public static void WriteFileTime(byte[] buffer, ref int offset, DateTime? time)
-        {
-            WriteFileTime(buffer, offset, time);
-            offset += 8;
         }
 
         /// <summary>

@@ -192,12 +192,6 @@ namespace SMBLibrary.NetBios
             return builder.ToString();
         }
 
-        public static void WriteNamePointer(byte[] buffer, ref int offset, int nameOffset)
-        {
-            WriteNamePointer(buffer, offset, nameOffset);
-            offset += 2;
-        }
-
         /// <summary>
         /// Will write a 2 bytes pointer to a name
         /// Note: NetBIOS implementations can only use label string pointers in Name Service packets

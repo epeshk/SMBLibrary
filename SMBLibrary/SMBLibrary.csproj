@@ -1,27 +1,42 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net20;net40;netstandard2.0</TargetFrameworks>
+    <TargetFramework>net60</TargetFramework>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <AssemblyName>SMBLibrary</AssemblyName>
+    <AssemblyName>SMBLibrary.Async</AssemblyName>
     <Version>1.4.9</Version>
     <NoWarn>1573;1591</NoWarn>
-    <RootNamespace>SMBLibrary</RootNamespace>
-    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <Authors>Tal Aloni</Authors>
-    <PackageDescription>SMBLibrary is an open-source C# SMB 1.0/CIFS, SMB 2.0, SMB 2.1 and SMB 3.0 server and client implementation</PackageDescription>
-    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/TalAloni/SMBLibrary</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/TalAloni/SMBLibrary</RepositoryUrl>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-  </PropertyGroup>
+    <RootNamespace>SMBLibrary.Async</RootNamespace>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Authors>epeshk</Authors>
+    <PackageDescription>
+      SMBLibrary.Async is an open-source C# SMB 2.0, SMB 2.1 and SMB 3.0 client implementation. Not all SMB features are implemented.
 
+      SMBLibrary.Async is a fork of the TalAloni/SMBLibrary with reduced functionality, but also with truly asynchronous API and low memory traffic.
+
+      The sole purpose of this fork is to improve performance over the original library. No additional features have been implemented.
+    </PackageDescription>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/epeshk/SMBLibrary.Async</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/epeshk/SMBLibrary.Async</RepositoryUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>SMBLibrary.Async</PackageId>
+    <PackageVersion>0.0.1</PackageVersion>
+  </PropertyGroup>
+  
   <ItemGroup>
-    <ProjectReference Include="..\Utilities\Utilities.csproj" PrivateAssets="All" />
+    <Compile Include="..\Utilities\**\*.cs" LinkBase="Utilities" />
+    <Compile Remove="..\Utilities\bin\**" />
+    <Compile Remove="..\Utilities\obj\**" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Lindhart.Analyser.MissingAwaitWarning" Version="3.0.0-beta" PrivateAssets="All" />
   </ItemGroup>
 
-  <Target Name="ILRepack" Condition="'$(Configuration)' == 'Release'" AfterTargets="AfterBuild">
-    <Exec Command="&quot;$(ProgramW6432)\ILRepack\ILRepack.exe&quot; /out=&quot;$(OutputPath)\SMBLibrary.dll&quot; &quot;$(OutputPath)\SMBLibrary.dll&quot; &quot;$(OutputPath)\Utilities.dll&quot;"></Exec>
-  </Target>
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
 
 </Project>

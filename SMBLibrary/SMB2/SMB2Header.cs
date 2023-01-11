@@ -39,7 +39,7 @@ namespace SMBLibrary.SMB2
             Signature = new byte[16];
         }
 
-        public SMB2Header(byte[] buffer, int offset)
+        public SMB2Header(Span<byte> buffer, int offset)
         {
             ProtocolId = ByteReader.ReadBytes(buffer, offset + 0, 4);
             StructureSize = LittleEndianConverter.ToUInt16(buffer, offset + 4);
@@ -167,16 +167,6 @@ namespace SMBLibrary.SMB2
                     Flags &= ~SMB2PacketHeaderFlags.Signed;
                 }
             }
-        }
-
-        public static bool IsValidSMB2Header(byte[] buffer)
-        {
-            if (buffer.Length >= 4)
-            {
-                byte[] protocol = ByteReader.ReadBytes(buffer, 0, 4);
-                return ByteUtils.AreByteArraysEqual(protocol, ProtocolSignature);
-            }
-            return false;
         }
     }
 }

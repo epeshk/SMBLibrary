@@ -1,4 +1,5 @@
 /* Copyright (C) 2020 Tal Aloni <tal.aloni.il@gmail.com>. All rights reserved.
+ * Copyright (C) 2023 Eugene Peshkov and SMBLibrary.Async contributors. All rights reserved.
  * 
  * You can redistribute this program and/or modify it under the terms of
  * the GNU Lesser Public License as published by the Free Software Foundation,
@@ -35,15 +36,15 @@ namespace SMBLibrary.SMB2
             ProtocolId = ProtocolSignature;
         }
 
-        public SMB2TransformHeader(byte[] buffer, int offset)
+        public SMB2TransformHeader(Span<byte> buffer)
         {
-            ProtocolId = ByteReader.ReadBytes(buffer, offset + 0, 4);
-            Signature = ByteReader.ReadBytes(buffer, offset + 4, SignatureLength);
-            Nonce = ByteReader.ReadBytes(buffer, offset + 20, NonceLength);
-            OriginalMessageSize = LittleEndianConverter.ToUInt32(buffer, offset + 36);
-            Reserved = LittleEndianConverter.ToUInt16(buffer, offset + 40);
-            Flags = (SMB2TransformHeaderFlags)LittleEndianConverter.ToUInt16(buffer, offset + 42);
-            SessionId = LittleEndianConverter.ToUInt64(buffer, offset + 44);
+            ProtocolId = ByteReader.ReadBytes(buffer, 0, 4);
+            Signature = ByteReader.ReadBytes(buffer, 4, SignatureLength);
+            Nonce = ByteReader.ReadBytes(buffer, 20, NonceLength);
+            OriginalMessageSize = LittleEndianConverter.ToUInt32(buffer, 36);
+            Reserved = LittleEndianConverter.ToUInt16(buffer, 40);
+            Flags = (SMB2TransformHeaderFlags)LittleEndianConverter.ToUInt16(buffer, 42);
+            SessionId = LittleEndianConverter.ToUInt64(buffer, 44);
         }
 
         public void WriteBytes(byte[] buffer, int offset)
@@ -69,10 +70,10 @@ namespace SMBLibrary.SMB2
             return buffer;
         }
 
-        public static bool IsTransformHeader(byte[] buffer, int offset)
+        public static bool IsTransformHeader(Span<byte> buffer)
         {
-            byte[] protocolId = ByteReader.ReadBytes(buffer, offset + 0, 4);
-            return ByteUtils.AreByteArraysEqual(ProtocolSignature, protocolId);
+            var protocolId = buffer.Slice(0, 4);
+            return ProtocolSignature.AsSpan().SequenceEqual(protocolId);
         }
     }
 }

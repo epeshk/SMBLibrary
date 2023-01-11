@@ -49,30 +49,5 @@ namespace SMBLibrary.NetBios
             }
             Statistics = new NodeStatistics(Resource.Data, ref position);
         }
-
-        public byte[] GetBytes()
-        {
-            Resource.Data = GetData();
-
-            MemoryStream stream = new MemoryStream();
-            Header.WriteBytes(stream);
-            Resource.WriteBytes(stream);
-            return stream.ToArray();
-        }
-
-        private byte[] GetData()
-        {
-            MemoryStream stream = new MemoryStream();
-            stream.WriteByte((byte)Names.Count);
-            foreach (KeyValuePair<string, NameFlags> entry in Names)
-            {
-                ByteWriter.WriteAnsiString(stream, entry.Key);
-                BigEndianWriter.WriteUInt16(stream, (ushort)entry.Value);
-            }
-
-            ByteWriter.WriteBytes(stream, Statistics.GetBytes());
-
-            return stream.ToArray();
-        }
     }
 }

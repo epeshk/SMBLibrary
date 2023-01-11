@@ -1,37 +1,20 @@
 Login and list shares:
 ======================
 ```
-SMB1Client client = new SMB1Client(); // SMB2Client can be used as well
-bool isConnected = client.Connect(IPAddress.Parse("192.168.1.11"), SMBTransportType.DirectTCPTransport);
+SMB2Client client = new SMB2Client(TimeSpan.FromSeconds(20), Console.Error.WriteLine);
+bool isConnected = await client.Connect(IPAddress.Parse("192.168.1.11"), SMBTransportType.DirectTCPTransport);
 if (isConnected)
 {
-    NTStatus status = client.Login(String.Empty, "Username", "Password");
-    if (status == NTStatus.STATUS_SUCCESS)
-    {
-        List<string> shares = client.ListShares(out status);
-        client.Logoff();
-    }
-    client.Disconnect();
+  NTStatus status = await client.Login(String.Empty, "Username", "Password");
+  if (status == NTStatus.STATUS_SUCCESS)
+  {
+    NTResult<List<string>> sharesResult = await client.ListShares();
+    if (sharesResult.Status != NTStatus.STATUS_SUCCESS) throw ...;
+    List<string> shares = sharesResult.Content;
+    await client.Logoff();
+  }
+  client.Disconnect();
 }
-```
-
-Connect to share and list files and directories - SMB1:
-=======================================================
-```
-ISMBFileStore fileStore = client.TreeConnect("Shared", out status);
-if (status == NTStatus.STATUS_SUCCESS)
-{
-    object directoryHandle;
-    FileStatus fileStatus;
-    status = fileStore.CreateFile(out directoryHandle, out fileStatus, "\\", AccessMask.GENERIC_READ, FileAttributes.Directory, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, CreateOptions.FILE_DIRECTORY_FILE, null);
-    if (status == NTStatus.STATUS_SUCCESS)
-    {
-        List<FindInformation> fileList2;
-        status = ((SMB1FileStore)fileStore).QueryDirectory(out fileList2, "\\*", FindInformationLevel.SMB_FIND_FILE_DIRECTORY_INFO);
-        status = fileStore.CloseFile(directoryHandle);
-    }
-}
-status = fileStore.Disconnect();
 ```
 
 Connect to share and list files and directories - SMB2:

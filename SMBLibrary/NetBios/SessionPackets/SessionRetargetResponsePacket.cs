@@ -1,11 +1,12 @@
 /* Copyright (C) 2014-2017 Tal Aloni <tal.aloni.il@gmail.com>. All rights reserved.
+ * Copyright (C) 2023 Eugene Peshkov and SMBLibrary.Async contributors. All rights reserved.
  * 
  * You can redistribute this program and/or modify it under the terms of
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using Utilities;
 
 namespace SMBLibrary.NetBios
@@ -23,18 +24,15 @@ namespace SMBLibrary.NetBios
             this.Type = SessionPacketTypeName.RetargetSessionResponse;
         }
 
-        public SessionRetargetResponsePacket(byte[] buffer, int offset) : base(buffer, offset)
+        public SessionRetargetResponsePacket(byte[] buffer, int offset, ArrayPool<byte> pool) : base(buffer, offset, pool)
         {
-            IPAddress = BigEndianConverter.ToUInt32(this.Trailer, offset + 0);
-            Port = BigEndianConverter.ToUInt16(this.Trailer, offset + 4);
+            IPAddress = BigEndianConverter.ToUInt32(this.TrailerBytes, offset + 0);
+            Port = BigEndianConverter.ToUInt16(this.TrailerBytes, offset + 4);
         }
 
-        public override byte[] GetBytes()
+        public override ArraySegment<byte>[] GetBytes()
         {
-            this.Trailer = new byte[6];
-            BigEndianWriter.WriteUInt32(this.Trailer, 0, IPAddress);
-            BigEndianWriter.WriteUInt16(this.Trailer, 4, Port);
-            return base.GetBytes();
+            throw new InvalidOperationException("Shouldn't be called for response packet");
         }
 
         public override int Length

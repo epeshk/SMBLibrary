@@ -1,4 +1,5 @@
 /* Copyright (C) 2014-2017 Tal Aloni <tal.aloni.il@gmail.com>. All rights reserved.
+ * Copyright (C) 2023 Eugene Peshkov and SMBLibrary.Async contributors. All rights reserved.
  * 
  * You can redistribute this program and/or modify it under the terms of
  * the GNU Lesser Public License as published by the Free Software Foundation,
@@ -78,11 +79,7 @@ namespace SMBLibrary.Authentication.NTLM
         {
             DES des = DES.Create();
             des.Mode = mode;
-            DESCryptoServiceProvider sm = des as DESCryptoServiceProvider;
-            MethodInfo mi = sm.GetType().GetMethod("_NewEncryptor", BindingFlags.NonPublic | BindingFlags.Instance);
-            object[] Par = { rgbKey, mode, rgbIV, sm.FeedbackSize, 0 };
-            ICryptoTransform trans = mi.Invoke(sm, Par) as ICryptoTransform;
-            return trans;
+            return des.CreateEncryptor(rgbKey, rgbIV);
         }
 
         /// <summary>

@@ -1,13 +1,10 @@
 /* Copyright (C) 2014-2019 Tal Aloni <tal.aloni.il@gmail.com>. All rights reserved.
+ * Copyright (C) 2023 Eugene Peshkov and SMBLibrary.Async contributors. All rights reserved.
  * 
  * You can redistribute this program and/or modify it under the terms of
  * the GNU Lesser Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  */
-using System;
-using System.Collections.Generic;
-using System.Text;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SMBLibrary.Authentication.NTLM;
 using Utilities;
 
@@ -16,10 +13,10 @@ namespace SMBLibrary.Tests
     /// <summary>
     /// [MS-NLMP] Tests
     /// </summary>
-    [TestClass]
+    [TestFixture]
     public class NTLMAuthenticationTests
     {
-        [TestMethod]
+        [Test]
         public void LMv1HashTest()
         {
             byte[] hash = NTLMCryptography.LMOWFv1("Password");
@@ -27,7 +24,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(hash, expected));
         }
 
-        [TestMethod]
+        [Test]
         public void NTv1HashTest()
         {
             byte[] hash = NTLMCryptography.NTOWFv1("Password");
@@ -35,7 +32,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(hash, expected));
         }
 
-        [TestMethod]
+        [Test]
         public void NTv2HashTest()
         {
             byte[] hash = NTLMCryptography.NTOWFv2("Password", "User", "Domain");
@@ -43,7 +40,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(hash, expected));
         }
 
-        [TestMethod]
+        [Test]
         public void LMv1ResponseTest()
         {
             byte[] challenge = new byte[] { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef };
@@ -52,7 +49,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(response, expected));
         }
 
-        [TestMethod]
+        [Test]
         public void NTLMv1ResponseTest()
         {
             byte[] challenge = new byte[] { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef };
@@ -61,7 +58,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(response, expected));
         }
 
-        [TestMethod]
+        [Test]
         public void LMv2ResponseTest()
         {
             byte[] serverChallenge = new byte[] { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef };
@@ -71,7 +68,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(response, expected));
         }
 
-        [TestMethod]
+        [Test]
         public void NTLMv2ResponseTest()
         {
             byte[] serverChallenge = new byte[] { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef };
@@ -85,7 +82,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(clientNTProof, expectedNTProof));
         }
 
-        [TestMethod]
+        [Test]
         public void NTLMv2ChallengeMessageTest()
         {
             byte[] expected = new byte[]{0x4e, 0x54, 0x4c, 0x4d, 0x53, 0x53, 0x50, 0x00, 0x02, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x0c, 0x00,
@@ -108,7 +105,7 @@ namespace SMBLibrary.Tests
             Assert.IsTrue(ByteUtils.AreByteArraysEqual(expected, messageBytes));
         }
 
-        [TestMethod]
+        [Test]
         public void NTLMv2AuthenticateMessageTest()
         {
             byte[] expected = new byte[] {  0x4e, 0x54, 0x4c, 0x4d, 0x53, 0x53, 0x50, 0x00, 0x03, 0x00, 0x00, 0x00, 0x18, 0x00, 0x18, 0x00,

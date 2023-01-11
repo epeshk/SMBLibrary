@@ -1,4 +1,5 @@
 /* Copyright (C) 2020 Tal Aloni <tal.aloni.il@gmail.com>. All rights reserved.
+ * Copyright (C) 2023 Eugene Peshkov and SMBLibrary.Async contributors. All rights reserved.
  * 
  * You can redistribute this program and/or modify it under the terms of
  * the GNU Lesser Public License as published by the Free Software Foundation,
@@ -14,15 +15,22 @@ namespace SMBLibrary.SMB2
     {
         private const int AesCcmNonceLength = 11;
 
-        public static byte[] CalculateSignature(byte[] signingKey, SMB2Dialect dialect, byte[] buffer, int offset, int paddedLength)
+        public static byte[] CalculateSignature(SMBSigningKey signingKey, SMB2Dialect dialect, ArraySegment<byte>[] buffers)
         {
             if (dialect == SMB2Dialect.SMB202 || dialect == SMB2Dialect.SMB210)
             {
-                return new HMACSHA256(signingKey).ComputeHash(buffer, offset, paddedLength);
+                foreach (var buffer in buffers)
+                    signingKey.HMAC.AppendData(buffer);
+
+                return signingKey.HMAC.GetHashAndReset();
             }
             else
             {
-                return AesCmac.CalculateAesCmac(signingKey, buffer, offset, paddedLength);
+                signingKey.CMAC.Initialize();
+                foreach (var buffer in buffers)
+                    signingKey.CMAC.HashCore2(buffer.Array, buffer.Offset, buffer.Count);
+
+                return signingKey.CMAC.HashFinal2();
             }
         }
 
@@ -76,38 +84,25 @@ namespace SMBLibrary.SMB2
             return SP800_1008.DeriveKey(hmac, label, context, 128);
         }
 
-        /// <summary>
-        /// Encyrpt message and prefix with SMB2 TransformHeader
-        /// </summary>
-        public static byte[] TransformMessage(byte[] key, byte[] message, ulong sessionID)
-        {
-            byte[] nonce = GenerateAesCcmNonce();
-            byte[] signature;
-            byte[] encryptedMessage = EncryptMessage(key, nonce, message, sessionID, out signature);
-            SMB2TransformHeader transformHeader = CreateTransformHeader(nonce, message.Length, sessionID);
-            transformHeader.Signature = signature;
-
-            byte[] buffer = new byte[SMB2TransformHeader.Length + message.Length];
-            transformHeader.WriteBytes(buffer, 0);
-            ByteWriter.WriteBytes(buffer, SMB2TransformHeader.Length, encryptedMessage);
-            return buffer;
-        }
-        
-        public static byte[] EncryptMessage(byte[] key, byte[] nonce, byte[] message, ulong sessionID, out byte[] signature)
-        {
-            SMB2TransformHeader transformHeader = CreateTransformHeader(nonce, message.Length, sessionID);
-            byte[] associatedata = transformHeader.GetAssociatedData();
-            return AesCcm.Encrypt(key, nonce, message, associatedata, SMB2TransformHeader.SignatureLength, out signature);
-        }
-
         public static byte[] DecryptMessage(byte[] key, SMB2TransformHeader transformHeader, byte[] encryptedMessage)
         {
             byte[] associatedData = transformHeader.GetAssociatedData();
             byte[] aesCcmNonce = ByteReader.ReadBytes(transformHeader.Nonce, 0, AesCcmNonceLength);
-            return AesCcm.DecryptAndAuthenticate(key, aesCcmNonce, encryptedMessage, associatedData, transformHeader.Signature);
+            var aesCcm = new AesCcm(key);
+            var result = new byte[encryptedMessage.Length];
+            aesCcm.Decrypt(aesCcmNonce, encryptedMessage, transformHeader.Signature, result, associatedData);
+            return result;
         }
 
-        private static SMB2TransformHeader CreateTransformHeader(byte[] nonce, int originalMessageLength, ulong sessionID)
+        public static void DecryptMessage(byte[] key, SMB2TransformHeader transformHeader, Span<byte> encryptedMessage)
+        {
+            byte[] associatedData = transformHeader.GetAssociatedData();
+            byte[] aesCcmNonce = ByteReader.ReadBytes(transformHeader.Nonce, 0, AesCcmNonceLength);
+            var aesCcm = new AesCcm(key);
+            aesCcm.Decrypt(aesCcmNonce, encryptedMessage, transformHeader.Signature, encryptedMessage, associatedData);
+        }
+
+        public static SMB2TransformHeader CreateTransformHeader(byte[] nonce, int originalMessageLength, ulong sessionID)
         {
             byte[] nonceWithPadding = new byte[SMB2TransformHeader.NonceLength];
             Array.Copy(nonce, nonceWithPadding, nonce.Length);
@@ -119,13 +114,6 @@ namespace SMBLibrary.SMB2
             transformHeader.SessionId = sessionID;
 
             return transformHeader;
-        }
-
-        private static byte[] GenerateAesCcmNonce()
-        {
-            byte[] aesCcmNonce = new byte[AesCcmNonceLength];
-            new Random().NextBytes(aesCcmNonce);
-            return aesCcmNonce;
         }
 
         private static byte[] GetNullTerminatedAnsiString(string value)

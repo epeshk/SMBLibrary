@@ -42,28 +42,5 @@ namespace SMBLibrary.NetBios
             ushort dataLength = BigEndianReader.ReadUInt16(buffer, ref offset);
             Data = ByteReader.ReadBytes(buffer, ref offset, dataLength);
         }
-
-        public void WriteBytes(Stream stream)
-        {
-            WriteBytes(stream, null);
-        }
-
-        public void WriteBytes(Stream stream, int? nameOffset)
-        {
-            if (nameOffset.HasValue)
-            {
-                NetBiosUtils.WriteNamePointer(stream, nameOffset.Value);
-            }
-            else
-            {
-                byte[] encodedName = NetBiosUtils.EncodeName(Name, String.Empty);
-                ByteWriter.WriteBytes(stream, encodedName);
-            }
-            BigEndianWriter.WriteUInt16(stream, (ushort)Type);
-            BigEndianWriter.WriteUInt16(stream, (ushort)Class);
-            BigEndianWriter.WriteUInt32(stream, TTL);
-            BigEndianWriter.WriteUInt16(stream, (ushort)Data.Length);
-            ByteWriter.WriteBytes(stream, Data);
-        }
     }
 }

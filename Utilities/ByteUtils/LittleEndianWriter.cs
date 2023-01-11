@@ -1,4 +1,5 @@
 /* Copyright (C) 2012-2020 Tal Aloni <tal.aloni.il@gmail.com>. All rights reserved.
+ * Copyright (C) 2023 Eugene Peshkov and SMBLibrary.Async contributors. All rights reserved.
  * 
  * You can redistribute this program and/or modify it under the terms of
  * the GNU Lesser Public License as published by the Free Software Foundation,
@@ -13,8 +14,7 @@ namespace Utilities
     {
         public static void WriteUInt16(byte[] buffer, int offset, ushort value)
         {
-            byte[] bytes = LittleEndianConverter.GetBytes(value);
-            Array.Copy(bytes, 0, buffer, offset, bytes.Length);
+            LittleEndianConverter.GetBytes(value, buffer.AsSpan(offset, 2));
         }
 
         public static void WriteUInt16(byte[] buffer, ref int offset, ushort value)
@@ -25,8 +25,7 @@ namespace Utilities
 
         public static void WriteInt16(byte[] buffer, int offset, short value)
         {
-            byte[] bytes = LittleEndianConverter.GetBytes(value);
-            Array.Copy(bytes, 0, buffer, offset, bytes.Length);
+            LittleEndianConverter.GetBytes(value, buffer.AsSpan(offset, 2));
         }
 
         public static void WriteInt16(byte[] buffer, ref int offset, short value)
@@ -37,8 +36,7 @@ namespace Utilities
 
         public static void WriteUInt32(byte[] buffer, int offset, uint value)
         {
-            byte[] bytes = LittleEndianConverter.GetBytes(value);
-            Array.Copy(bytes, 0, buffer, offset, bytes.Length);
+            LittleEndianConverter.GetBytes(value, buffer.AsSpan(offset, 4));
         }
 
         public static void WriteUInt32(byte[] buffer, ref int offset, uint value)
@@ -49,8 +47,7 @@ namespace Utilities
 
         public static void WriteInt32(byte[] buffer, int offset, int value)
         {
-            byte[] bytes = LittleEndianConverter.GetBytes(value);
-            Array.Copy(bytes, 0, buffer, offset, bytes.Length);
+            LittleEndianConverter.GetBytes(value, buffer.AsSpan(offset, 4));
         }
 
         public static void WriteInt32(byte[] buffer, ref int offset, int value)
@@ -61,8 +58,7 @@ namespace Utilities
 
         public static void WriteUInt64(byte[] buffer, int offset, ulong value)
         {
-            byte[] bytes = LittleEndianConverter.GetBytes(value);
-            Array.Copy(bytes, 0, buffer, offset, bytes.Length);
+            LittleEndianConverter.GetBytes(value, buffer.AsSpan(offset, 8));
         }
 
         public static void WriteUInt64(byte[] buffer, ref int offset, ulong value)
@@ -73,8 +69,7 @@ namespace Utilities
 
         public static void WriteInt64(byte[] buffer, int offset, long value)
         {
-            byte[] bytes = LittleEndianConverter.GetBytes(value);
-            Array.Copy(bytes, 0, buffer, offset, bytes.Length);
+            LittleEndianConverter.GetBytes(value, buffer.AsSpan(offset, 8));
         }
 
         public static void WriteInt64(byte[] buffer, ref int offset, long value)
@@ -97,20 +92,23 @@ namespace Utilities
 
         public static void WriteUInt16(Stream stream, ushort value)
         {
-            byte[] bytes = LittleEndianConverter.GetBytes(value);
-            stream.Write(bytes, 0, bytes.Length);
+            Span<byte> bytes = stackalloc byte[2];
+            LittleEndianConverter.GetBytes(value, bytes);
+            stream.Write(bytes);
         }
 
         public static void WriteInt32(Stream stream, int value)
         {
-            byte[] bytes = LittleEndianConverter.GetBytes(value);
-            stream.Write(bytes, 0, bytes.Length);
+            Span<byte> bytes = stackalloc byte[4];
+            LittleEndianConverter.GetBytes(value, bytes);
+            stream.Write(bytes);
         }
 
         public static void WriteUInt32(Stream stream, uint value)
         {
-            byte[] bytes = LittleEndianConverter.GetBytes(value);
-            stream.Write(bytes, 0, bytes.Length);
+            Span<byte> bytes = stackalloc byte[4];
+            LittleEndianConverter.GetBytes(value, bytes);
+            stream.Write(bytes);
         }
     }
 }
