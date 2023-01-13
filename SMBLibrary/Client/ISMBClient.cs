@@ -7,26 +7,25 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Threading.Tasks;
 
 namespace SMBLibrary.Client
 {
     public interface ISMBClient
     {
-        bool Connect(string serverName, SMBTransportType transport);
+        Task<bool> Connect(string serverName, SMBTransportType transport);
 
-        bool Connect(IPAddress serverAddress, SMBTransportType transport);
+        Task<bool> Connect(IPAddress serverAddress, SMBTransportType transport);
 
         void Disconnect();
 
-        NTStatus Login(string domainName, string userName, string password);
+        Task<NTStatus> Login(string domainName, string userName, string password);
 
-        NTStatus Login(string domainName, string userName, string password, AuthenticationMethod authenticationMethod);
+        Task<NTStatus> Login(string domainName, string userName, string password, AuthenticationMethod authenticationMethod);
 
-        NTStatus Logoff();
+        Task<NTStatus> Logoff();
 
-        List<string> ListShares(out NTStatus status);
-
-        ISMBFileStore TreeConnect(string shareName, out NTStatus status);
+        Task<ISMBFileStore> TreeConnect(string shareName);
 
         uint MaxReadSize
         {

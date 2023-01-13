@@ -7,6 +7,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using Utilities;
 
 namespace SMBLibrary
@@ -117,35 +118,29 @@ namespace SMBLibrary
             return result;
         }
 
-        public static FileNetworkOpenInformation GetNetworkOpenInformation(INTFileStore fileStore, string path, SecurityContext securityContext)
+        public static async Task<FileNetworkOpenInformation> GetNetworkOpenInformation(INTFileStore fileStore, string path, SecurityContext securityContext)
         {
-            object handle;
-            FileStatus fileStatus;
-            NTStatus openStatus = fileStore.CreateFile(out handle, out fileStatus, path, (AccessMask)FileAccessMask.FILE_READ_ATTRIBUTES, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, 0, securityContext);
-            if (openStatus != NTStatus.STATUS_SUCCESS)
+            var openResult = await fileStore.CreateFile(path, (AccessMask)FileAccessMask.FILE_READ_ATTRIBUTES, 0, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, 0, securityContext);
+            if (openResult.Status != NTStatus.STATUS_SUCCESS)
             {
                 return null;
             }
-            FileInformation fileInfo;
-            NTStatus queryStatus = fileStore.GetFileInformation(out fileInfo, handle, FileInformationClass.FileNetworkOpenInformation);
-            fileStore.CloseFile(handle);
-            if (queryStatus != NTStatus.STATUS_SUCCESS)
+            var queryResult = await fileStore.GetFileInformation(openResult.Content.Handle, FileInformationClass.FileNetworkOpenInformation);
+            await fileStore.CloseFile(openResult.Content.Handle);
+            if (queryResult.Status != NTStatus.STATUS_SUCCESS)
             {
                 return null;
             }
-            return (FileNetworkOpenInformation)fileInfo;
+            return (FileNetworkOpenInformation)queryResult.Content;
         }
 
-        public static FileNetworkOpenInformation GetNetworkOpenInformation(INTFileStore fileStore, object handle)
+        public static async Task<FileNetworkOpenInformation> GetNetworkOpenInformation(INTFileStore fileStore, object handle)
         {
-            FileInformation fileInfo;
-            NTStatus status = fileStore.GetFileInformation(out fileInfo, handle, FileInformationClass.FileNetworkOpenInformation);
-            if (status != NTStatus.STATUS_SUCCESS)
-            {
+            var result = await fileStore.GetFileInformation(handle, FileInformationClass.FileNetworkOpenInformation);
+            if (result.Status != NTStatus.STATUS_SUCCESS)
                 return null;
-            }
 
-            return (FileNetworkOpenInformation)fileInfo;
+            return (FileNetworkOpenInformation)result.Content;
         }
     }
 }

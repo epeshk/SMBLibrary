@@ -19,5 +19,9 @@
   <ItemGroup>
     <Compile Include="..\Utilities\**\*.cs" LinkBase="Utilities" />
   </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Lindhart.Analyser.MissingAwaitWarning" Version="3.0.0-beta" />
+  </ItemGroup>
 
 </Project>
