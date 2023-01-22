@@ -15,7 +15,7 @@ namespace SMBLibrary.Tests
     [TestFixture]
     public class NTLMSigningTests
     {
-        [Test]
+      [Test]
         public void TestLMMIC()
         {
             string password = "Password";

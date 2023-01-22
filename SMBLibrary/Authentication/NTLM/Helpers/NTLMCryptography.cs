@@ -78,8 +78,7 @@ namespace SMBLibrary.Authentication.NTLM
         {
             DES des = DES.Create();
             des.Mode = mode;
-            ICryptoTransform trans = des.CreateEncryptor(rgbKey, rgbIV);
-            return trans;
+            return des.CreateEncryptor(rgbKey, rgbIV);
         }
 
         /// <summary>

@@ -12,13 +12,6 @@ namespace Utilities
 {
     public class SocketUtils
     {
-        private static bool IsDotNetFramework()
-        {
-            const string DotnetFrameworkDescription = ".NET Framework";
-            string frameworkDescription = RuntimeInformation.FrameworkDescription;
-            return frameworkDescription.StartsWith(DotnetFrameworkDescription);
-        }
-
         public static void SetKeepAlive(Socket socket, TimeSpan timeout)
         {
             // The default settings when a TCP socket is initialized sets the keep-alive timeout to 2 hours and the keep-alive interval to 1 second.
