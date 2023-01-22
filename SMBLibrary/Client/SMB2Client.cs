@@ -556,7 +556,7 @@ namespace SMBLibrary.Client
                 m_messageID += request.Header.CreditCharge;
             }
 
-            return await completion.Task.WaitAsync(m_globalCancellationToken);
+            return await completion.Task.WaitAsync(TimeSpan.FromMilliseconds(ResponseTimeoutInMilliseconds), m_globalCancellationToken);
         }
 
         public uint MaxTransactSize
