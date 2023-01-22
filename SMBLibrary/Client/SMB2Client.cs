@@ -35,7 +35,7 @@ namespace SMBLibrary.Client
         private bool m_isLoggedIn;
         private Socket m_clientSocket;
 
-        private ConcurrentDictionary<(ulong messageId, ulong sessionId), TaskCompletionSource<SMB2Command>> m_incomingQueue = new();
+        private ConcurrentDictionary<ulong, TaskCompletionSource<SMB2Command>> m_incomingQueue = new();
         private SessionPacket m_sessionResponsePacket;
         private EventWaitHandle m_sessionResponseEventHandle = new EventWaitHandle(false, EventResetMode.AutoReset);
         private CancellationTokenSource m_globalCancellation = new();
@@ -435,7 +435,7 @@ namespace SMBLibrary.Client
                 // Otherwise, the response MUST be discarded as invalid.
                 if (command.Header.MessageID != 0xFFFFFFFFFFFFFFFF || command.Header.Command == SMB2CommandName.OplockBreak)
                 {
-                    var key = (command.Header.MessageID, command.Header.SessionID);
+                    var key = command.Header.MessageID;
                     if (!m_incomingQueue.TryRemove(key, out var completion))
                     {}
                     
@@ -570,10 +570,10 @@ namespace SMBLibrary.Client
             }
 
             var completion = new TaskCompletionSource<SMB2Command>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var key = (request.Header.MessageID, request.Header.SessionID);
+            var key = request.Header.MessageID;
             if (!m_incomingQueue.TryAdd(key, completion))
                 throw new InvalidOperationException(
-                    $"Duplicate key. MessageID: {key.MessageID}, SessionID: {key.SessionID}");
+                    $"Duplicate key. MessageID: {request.Header.MessageID}, SessionID: {request.Header.SessionID}");
 
             await TrySendCommand(m_clientSocket, request, encryptData ? m_encryptionKey : null);
             if (m_dialect == SMB2Dialect.SMB202 || m_transport == SMBTransportType.NetBiosOverTCP)

@@ -18,6 +18,8 @@
   
   <ItemGroup>
     <Compile Include="..\Utilities\**\*.cs" LinkBase="Utilities" />
+    <Compile Remove="..\Utilities\bin\**" />
+    <Compile Remove="..\Utilities\obj\**" />
   </ItemGroup>
   
   <ItemGroup>
