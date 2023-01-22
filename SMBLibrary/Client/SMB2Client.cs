@@ -458,35 +458,6 @@ namespace SMBLibrary.Client
             }
         }
 
-        // internal SMB2Command WaitForCommand(ulong messageID)
-        // {
-        //     Stopwatch stopwatch = new Stopwatch();
-        //     stopwatch.Start();
-        //     while (stopwatch.ElapsedMilliseconds < ResponseTimeoutInMilliseconds)
-        //     {
-        //         lock (m_incomingQueueLock)
-        //         {
-        //             for (int index = 0; index < m_incomingQueue.Count; index++)
-        //             {
-        //                 SMB2Command command = m_incomingQueue[index];
-        //
-        //                 if (command.Header.MessageID == messageID)
-        //                 {
-        //                     m_incomingQueue.RemoveAt(index);
-        //                     if (command.Header.IsAsync && command.Header.Status == NTStatus.STATUS_PENDING)
-        //                     {
-        //                         index--;
-        //                         continue;
-        //                     }
-        //                     return command;
-        //                 }
-        //             }
-        //         }
-        //         m_incomingQueueEventHandle.WaitOne(100);
-        //     }
-        //     return null;
-        // }
-
         internal SessionPacket WaitForSessionResponsePacket()
         {
             const int TimeOut = 5000;
