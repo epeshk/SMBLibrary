@@ -435,6 +435,8 @@ namespace SMBLibrary.Client
                 // Otherwise, the response MUST be discarded as invalid.
                 if (command.Header.MessageID != 0xFFFFFFFFFFFFFFFF || command.Header.Command == SMB2CommandName.OplockBreak)
                 {
+                    if (command.Header.Status == NTStatus.STATUS_PENDING)
+                        return;
                     var key = command.Header.MessageID;
                     if (!m_incomingQueue.TryRemove(key, out var completion))
                     {}
