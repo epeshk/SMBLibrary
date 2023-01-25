@@ -20,6 +20,13 @@ namespace SMBLibrary.Client
 {
     public class SMB2Client : ISMBClient
     {
+        private static int clientIdSource;
+        private readonly int clientId;
+        
+        private readonly Action<string> traceLog;
+        private readonly Action<string> errorLog;
+        private readonly TimeSpan timeout;
+
         public static readonly int NetBiosOverTCPPort = 139;
         public static readonly int DirectTCPPort = 445;
 
@@ -27,7 +34,6 @@ namespace SMBLibrary.Client
         public static readonly uint ClientMaxReadSize = 1048576;
         public static readonly uint ClientMaxWriteSize = 1048576;
         private static readonly ushort DesiredCredits = 16;
-        public static readonly int ResponseTimeoutInMilliseconds = 5000;
 
         private string m_serverName;
         private SMBTransportType m_transport;
@@ -56,9 +62,13 @@ namespace SMBLibrary.Client
         private byte[] m_sessionKey;
         private ushort m_availableCredits = 1;
 
-        public SMB2Client()
+        public SMB2Client(Action<string> traceLog, Action<string> errorLog, TimeSpan timeout)
         {
+            this.traceLog = traceLog;
+            this.errorLog = errorLog;
+            this.timeout = timeout;
             m_globalCancellationToken = m_globalCancellation.Token;
+            clientId = Interlocked.Increment(ref clientIdSource) - 1;
         }
 
         /// <param name="serverName">
@@ -148,6 +158,7 @@ namespace SMBLibrary.Client
         private bool ConnectSocket(IPAddress serverAddress, int port)
         {
             m_clientSocket = new Socket(serverAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            m_clientSocket.NoDelay = true;
 
             try
             {
@@ -318,16 +329,17 @@ namespace SMBLibrary.Client
             }
             catch (ArgumentException) // The IAsyncResult object was not returned from the corresponding synchronous method on this class.
             {
+                errorLog?.Invoke($"{clientId} - [ReceiveCallback] EndReceive ArgumentException");
                 return;
             }
             catch (ObjectDisposedException)
             {
-                Log("[ReceiveCallback] EndReceive ObjectDisposedException");
+                errorLog?.Invoke($"{clientId} - [ReceiveCallback] EndReceive ObjectDisposedException");
                 return;
             }
             catch (SocketException ex)
             {
-                Log("[ReceiveCallback] EndReceive SocketException: " + ex.Message);
+                errorLog?.Invoke($"{clientId} - [ReceiveCallback] EndReceive SocketException: " + ex.Message);
                 m_globalCancellation.Cancel();
                 return;
             }
@@ -341,6 +353,7 @@ namespace SMBLibrary.Client
             {
                 NBTConnectionReceiveBuffer buffer = state.ReceiveBuffer;
                 buffer.SetNumberOfBytesReceived(numberOfBytesReceived);
+                traceLog?.Invoke($"{clientId} - received {numberOfBytesReceived} bytes");
                 ProcessConnectionBuffer(state);
 
                 try
@@ -370,8 +383,9 @@ namespace SMBLibrary.Client
                 {
                     packet = receiveBuffer.DequeuePacket();
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
+                    errorLog?.Invoke(e.ToString());
                     state.ClientSocket.Close();
                     break;
                 }
@@ -403,10 +417,11 @@ namespace SMBLibrary.Client
                 try
                 {
                     command = SMB2Command.ReadResponse(messageBytes, 0);
+                    traceLog?.Invoke($"{clientId} - received command of type {command.CommandName} ({command.GetType().Name}) with messageId: {command.Header.MessageID}, sessionId: {command.Header.SessionID}");
                 }
                 catch (Exception ex)
                 {
-                    Log("Invalid SMB2 response: " + ex.Message);
+                    errorLog?.Invoke($"{clientId} - Invalid SMB2 response: " + ex.Message);
                     state.ClientSocket.Close();
                     m_isConnected = false;
                     return;
@@ -439,8 +454,12 @@ namespace SMBLibrary.Client
                         return;
                     var key = command.Header.MessageID;
                     if (!m_incomingQueue.TryRemove(key, out var completion))
-                    {}
+                    {
+                        errorLog?.Invoke($"{clientId} - Not found matching request for messageId: {key}");
+                        return;
+                    }
                     
+                    traceLog?.Invoke($"{clientId} - completing request with messageId: {key}");
                     completion.SetResult(command);
                 }
             }
@@ -545,10 +564,16 @@ namespace SMBLibrary.Client
             var completion = new TaskCompletionSource<SMB2Command>(TaskCreationOptions.RunContinuationsAsynchronously);
             var key = request.Header.MessageID;
             if (!m_incomingQueue.TryAdd(key, completion))
-                throw new InvalidOperationException(
-                    $"Duplicate key. MessageID: {request.Header.MessageID}, SessionID: {request.Header.SessionID}");
+            {
+                var errorMessage = $"{clientId} - Duplicate key. MessageID: {request.Header.MessageID}, SessionID: {request.Header.SessionID}";
+                errorLog?.Invoke(errorMessage);
+                throw new InvalidOperationException(errorMessage);
+            }
+            
+            traceLog?.Invoke($"{clientId} - Sending message of type {request.GetType().Name} with messageId: {request.Header.MessageID}, sessionId: {request.Header.SessionID} to {m_clientSocket.RemoteEndPoint}");
 
             await TrySendCommand(m_clientSocket, request, encryptData ? m_encryptionKey : null);
+
             if (m_dialect == SMB2Dialect.SMB202 || m_transport == SMBTransportType.NetBiosOverTCP)
             {
                 m_messageID++;
@@ -558,7 +583,9 @@ namespace SMBLibrary.Client
                 m_messageID += request.Header.CreditCharge;
             }
 
-            return await completion.Task.WaitAsync(TimeSpan.FromMilliseconds(ResponseTimeoutInMilliseconds), m_globalCancellationToken);
+            var response = await completion.Task.WaitAsync(timeout, m_globalCancellationToken);
+            traceLog?.Invoke($"{clientId} - received response for messageId: {key}");
+            return response;
         }
 
         public uint MaxTransactSize
