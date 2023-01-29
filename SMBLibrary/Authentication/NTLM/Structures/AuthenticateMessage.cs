@@ -29,7 +29,7 @@ namespace SMBLibrary.Authentication.NTLM
         public IMemoryOwner<byte> EncryptedRandomSessionKey;
         public NegotiateFlags NegotiateFlags;
         public NTLMVersion Version;
-        // 16-byte MIC field is omitted for Windows NT / 2000 / XP / Server 2003
+        public IMemoryOwner<byte> MIC; // 16-byte MIC field is omitted for Windows NT / 2000 / XP / Server 2003
 
         public AuthenticateMessage()
         {
@@ -46,6 +46,7 @@ namespace SMBLibrary.Authentication.NTLM
             if(LmChallengeResponse != null) LmChallengeResponse.Dispose();
             if(NtChallengeResponse != null) NtChallengeResponse.Dispose();
             if(EncryptedRandomSessionKey != null) EncryptedRandomSessionKey.Dispose();
+            if(MIC != null) MIC.Dispose();
             LmChallengeResponse = NtChallengeResponse = EncryptedRandomSessionKey = null;
         }
 
@@ -60,10 +61,51 @@ namespace SMBLibrary.Authentication.NTLM
             WorkStation = AuthenticationMessageUtils.ReadUnicodeStringBufferPointer(buffer, 44);
             EncryptedRandomSessionKey = AuthenticationMessageUtils.ReadBufferPointer(buffer, 52);
             NegotiateFlags = (NegotiateFlags)LittleEndianConverter.ToUInt32(buffer, 60);
+            int offset = 64;
             if ((NegotiateFlags & NegotiateFlags.Version) > 0)
             {
                 Version = new NTLMVersion(buffer, 64);
+                offset += NTLMVersion.Length;
             }
+
+            if (HasMicField())
+            {
+                MIC = Arrays.Rent<byte>(16);
+                ByteReader.ReadBytes(MIC.Memory.Span, buffer, offset, 16);
+            }
+        }
+
+        public bool HasMicField()
+        {
+            if (!AuthenticationMessageUtils.IsNTLMv2NTResponse(NtChallengeResponse.Memory.Span))
+            {
+                return false;
+            }
+
+            NTLMv2ClientChallenge challenge;
+            try
+            {
+                challenge = new NTLMv2ClientChallenge(NtChallengeResponse.Memory.Span, 16);
+            }
+            catch
+            {
+                return false;
+            }
+
+            using var _ = challenge;
+
+            int index = challenge.AVPairs.IndexOfKey(AVPairKey.Flags);
+            if (index >= 0)
+            {
+                byte[] value = challenge.AVPairs[index].Value;
+                if (value.Length == 4)
+                {
+                    int flags = LittleEndianConverter.ToInt32(value, 0);
+                    return (flags & 0x02) > 0;
+                }
+            }
+
+            return false;
         }
 
         public IMemoryOwner<byte> GetBytes()
@@ -78,17 +120,28 @@ namespace SMBLibrary.Authentication.NTLM
             {
                 fixedLength += NTLMVersion.Length;
             }
+            if (MIC != null)
+            {
+                fixedLength += MIC.Length();
+            }
             var payloadLength = LmChallengeResponse.Length() + NtChallengeResponse.Length() + DomainName.Length * 2 + UserName.Length * 2 + WorkStation.Length * 2 + EncryptedRandomSessionKey.Length();
             var buffer = Arrays.Rent(fixedLength + payloadLength);
             BufferWriter.WriteAnsiString(buffer.Memory.Span, 0, ValidSignature, 8);
             LittleEndianWriter.WriteUInt32(buffer, 8, (uint)MessageType);
             LittleEndianWriter.WriteUInt32(buffer, 60, (uint)NegotiateFlags);
+            int offset = 64;
             if ((NegotiateFlags & NegotiateFlags.Version) > 0)
             {
                 Version.WriteBytes(buffer.Memory.Span, 64);
+                offset += NTLMVersion.Length;
             }
-            
-            var offset = fixedLength;
+
+            if (MIC != null)
+            {
+                BufferWriter.WriteBytes(buffer.Memory.Span.Slice(offset), MIC.Memory.Span);
+                offset += MIC.Length();
+            }
+
             AuthenticationMessageUtils.WriteBufferPointer(buffer.Memory.Span, 12, (ushort)LmChallengeResponse.Length(), (uint)offset);
             BufferWriter.WriteBytes(buffer.Memory.Span, ref offset, LmChallengeResponse.Memory.Span);
             AuthenticationMessageUtils.WriteBufferPointer(buffer.Memory.Span, 20, (ushort)NtChallengeResponse.Length(), (uint)offset);
