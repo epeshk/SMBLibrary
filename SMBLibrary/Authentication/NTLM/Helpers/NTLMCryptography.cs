@@ -85,11 +85,7 @@ namespace SMBLibrary.Authentication.NTLM
         {
             var des = DES.Create();
             des.Mode = mode;
-            var sm = des as DESCryptoServiceProvider;
-            var mi = sm.GetType().GetMethod("_NewEncryptor", BindingFlags.NonPublic | BindingFlags.Instance);
-            object[] Par = { rgbKey, mode, rgbIV, sm.FeedbackSize, 0 };
-            var trans = mi.Invoke(sm, Par) as ICryptoTransform;
-            return trans;
+            return des.CreateEncryptor(rgbKey, rgbIV);
         }
 
         /// <summary>
