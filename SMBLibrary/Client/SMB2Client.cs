@@ -632,7 +632,7 @@ namespace SMBLibrary.Client
             request.Header.SessionId = _sessionId;
             if (_signingRequired)
             {
-                request.Header.IsSigned = (_sessionId != 0 && (request.CommandName == SMB2CommandName.TreeConnect || request.Header.TreeId != 0));
+                request.Header.IsSigned = (_sessionId != 0 && (request.CommandName == SMB2CommandName.TreeConnect || request.Header.TreeId != 0)) || (_dialect == SMB2Dialect.SMB300 && request.CommandName == SMB2CommandName.Logoff);
                 if (request.Header.IsSigned)
                 {
                     Span<byte> hash = stackalloc byte[16];
@@ -692,7 +692,7 @@ namespace SMBLibrary.Client
             request.Header.SessionId = _sessionId;
             if (_signingRequired)
             {
-                request.Header.IsSigned = (_sessionId != 0 && (request.CommandName == SMB2CommandName.TreeConnect || request.Header.TreeId != 0));
+                request.Header.IsSigned = (_sessionId != 0 && (request.CommandName == SMB2CommandName.TreeConnect || request.Header.TreeId != 0)) || (_dialect == SMB2Dialect.SMB300 && request.CommandName == SMB2CommandName.Logoff);
                 if (request.Header.IsSigned)
                 {
                     Span<byte> hash = stackalloc byte[16];
