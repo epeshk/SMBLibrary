@@ -135,7 +135,7 @@ namespace SMBLibrary.Client
         
         private bool ConnectSocket(IPAddress serverAddress, int port)
         {
-            _clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            _clientSocket = new Socket(serverAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             
             try
             {
