@@ -7,7 +7,7 @@ namespace MemoryPools.Memory
 	{
 		public static MemoryOwner<T> Empty = new MemoryOwner<T>(Memory<T>.Empty);
 
-		protected MemoryOwner(Memory<T> memory)
+		public MemoryOwner(Memory<T> memory)
 		{
 			Memory = memory;
 		}

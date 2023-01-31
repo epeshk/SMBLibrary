@@ -5,11 +5,13 @@
  * either version 3 of the License, or (at your option) any later version.
  */
 
+using System.Threading.Tasks;
+
 namespace SMBLibrary.Client
 {
     public interface ISMBFileStore : INTFileStore
     {
-        NTStatus Disconnect();
+        Task<NTStatus> Disconnect();
 
         uint MaxReadSize
         {

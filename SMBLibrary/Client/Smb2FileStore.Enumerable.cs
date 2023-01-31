@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using MemoryPools.Memory;
@@ -123,12 +124,12 @@ namespace SMBLibrary.Client
 					}
 				}
 
-				public ValueTask<bool> MoveNextAsync()
+				public async ValueTask<bool> MoveNextAsync()
 				{
 					// if finished, return false
 					if (_step > 0 && _response == null)
 					{
-						return new ValueTask<bool>(false);
+						return false;
 					}
 					
 					// if started or batch finished, request more data
@@ -149,9 +150,8 @@ namespace SMBLibrary.Client
 						_indexInBatch = 0;
 
 						_token.ThrowIfCancellationRequested();
-                        _store.TrySendCommandAndDispose(_request);
                         
-                        var response = _client.WaitForCommand(SMB2CommandName.QueryDirectory);
+						var response = await _store.TrySendCommandAndDispose(_request);
 						if (response != null && response.Header.Status == NTStatus.STATUS_SUCCESS && response is QueryDirectoryResponse qdr)
 						{ 
 							_response = qdr.GetFileInformationList(_informationClass);
@@ -161,7 +161,7 @@ namespace SMBLibrary.Client
 						{
 							// Nothing found. disposing.
 							response?.Dispose();
-							return new ValueTask<bool>(false);
+							return false;
 						}
 					}
 
@@ -173,8 +173,8 @@ namespace SMBLibrary.Client
 						
 					_indexInBatch++;
 					_step++;
-					
-					return new ValueTask<bool>(true);
+
+					return true;
 				}
 
 				public FindFilesQueryResult Current { get; private set; }

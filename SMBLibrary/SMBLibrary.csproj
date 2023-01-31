@@ -9,15 +9,12 @@
     <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
     <Package>true</Package>
     <LangVersion>latest</LangVersion>
-    <TargetFramework>netstandard2.1</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Linq.Async" Version="4.1.1" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\MemoryPools\MemoryPools.csproj" />
   </ItemGroup>
   
 </Project>

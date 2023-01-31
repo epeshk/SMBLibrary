@@ -5,9 +5,11 @@
  * either version 3 of the License, or (at your option) any later version.
  */
 
+using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using SMBLibrary.Client;
 
 namespace SMBLibrary
@@ -19,33 +21,32 @@ namespace SMBLibrary
     /// </summary>
     public interface INTFileStore
     {
-        NTStatus CreateFile(out object handle, out FileStatus fileStatus, IMemoryOwner<char> path, AccessMask desiredAccess, FileAttributes fileAttributes, ShareAccess shareAccess, CreateDisposition createDisposition, CreateOptions createOptions, SecurityContext securityContext);
+        Task<NtResult<(object Handle, FileStatus FileStatus)>> CreateFile(string path, AccessMask desiredAccess, FileAttributes fileAttributes, ShareAccess shareAccess, CreateDisposition createDisposition, CreateOptions createOptions, SecurityContext securityContext);
 
-        NTStatus CloseFile(object handle);
+        Task<NTStatus> CloseFile(object handle);
 
-        NTStatus ReadFile(out IMemoryOwner<byte> data, object handle, long offset, int maxCount);
+        Task<NtResult<IMemoryOwner<byte>>> ReadFile(object handle, long offset, int maxCount);
 
-        NTStatus WriteFile(out int numberOfBytesWritten, object handle, long offset, IMemoryOwner<byte> data);
+        Task<NtResult<int>> WriteFile(object handle, long offset, Memory<byte> data);
 
-        NTStatus FlushFileBuffers(object handle);
+        Task<NTStatus> FlushFileBuffers(object handle);
 
         NTStatus LockFile(object handle, long byteOffset, long length, bool exclusiveLock);
 
         NTStatus UnlockFile(object handle, long byteOffset, long length);
 
         NTStatus QueryDirectory(out List<FindFilesQueryResult> result, object handle, string fileName, FileInformationClass informationClass);
-
         IAsyncEnumerable<FindFilesQueryResult> QueryDirectoryAsync(object handle, string fileName, FileInformationClass informationClass, bool closeOnFinish, CancellationToken outerToken = default);
         
-        NTStatus GetFileInformation(out FileInformation result, object handle, FileInformationClass informationClass);
+        Task<NtResult<FileInformation>> GetFileInformation(object handle, FileInformationClass informationClass);
 
-        NTStatus SetFileInformation(object handle, FileInformation information);
+        Task<NTStatus> SetFileInformation(object handle, FileInformation information);
 
-        NTStatus GetFileSystemInformation(out FileSystemInformation result, FileSystemInformationClass informationClass);
+        Task<NtResult<FileSystemInformation>> GetFileSystemInformation(FileSystemInformationClass informationClass);
 
         NTStatus SetFileSystemInformation(FileSystemInformation information);
 
-        NTStatus GetSecurityInformation(out SecurityDescriptor result, object handle, SecurityInformation securityInformation);
+        Task<NtResult<SecurityDescriptor>> GetSecurityInformation(object handle, SecurityInformation securityInformation);
 
         NTStatus SetSecurityInformation(object handle, SecurityInformation securityInformation, SecurityDescriptor securityDescriptor);
 
@@ -62,6 +63,6 @@ namespace SMBLibrary
 
         NTStatus Cancel(object ioRequest);
 
-        NTStatus DeviceIOControl(object handle, uint ctlCode, IMemoryOwner<byte> input, out IMemoryOwner<byte> output, int maxOutputLength);
+        Task<NtResult<IMemoryOwner<byte>>> DeviceIOControl(object handle, uint ctlCode, byte[] input, int maxOutputLength);
     }
 }
