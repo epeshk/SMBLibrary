@@ -116,7 +116,7 @@ namespace SMBLibrary.SMB2
             FileId = default;
 
             WriteChannelInfo.Dispose();
-            WriteChannelInfo = Data = null;
+            WriteChannelInfo = Data = MemoryOwner<byte>.Empty;
             ObjectsPool<WriteRequest>.Return(this);
         }
 
